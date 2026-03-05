@@ -3686,39 +3686,39 @@ class RouletteBoardApp:
                     has_marker=True,
                 )
 
-        street_y = bottom
+        marker_gap_y = bottom + (self.vertical_gap / 2.0)
         for c in range(self.cols):
             x = left + c * self.cell_w + self.cell_w / 2
             nums = [self._number_at(c, r) for r in range(3)]
-            self._draw_bet_marker(x, street_y)
+            self._draw_bet_marker(x, marker_gap_y, visible=True, color="#d946ef")
             self._add_spot(
                 f"street_{c + 1}",
                 f"Street {'/'.join(map(str, sorted(nums)))}",
-                (x, street_y),
+                (x, marker_gap_y),
                 payout="11:1",
                 hit_shape="oval",
-                hit_coords=(x - 14, street_y - 14, x + 14, street_y + 14),
+                hit_coords=(x - 13, marker_gap_y - 13, x + 13, marker_gap_y + 13),
                 has_marker=True,
             )
 
         for c in range(self.cols - 1):
             x = left + (c + 1) * self.cell_w
             nums = sorted([self._number_at(c, r) for r in range(3)] + [self._number_at(c + 1, r) for r in range(3)])
-            self._draw_bet_marker(x, street_y)
+            self._draw_bet_marker(x, marker_gap_y, visible=True, color="#7c3aed")
             self._add_spot(
                 f"sixline_{c + 1}_{c + 2}",
                 f"Six Line {'/'.join(map(str, nums))}",
-                (x, street_y),
+                (x, marker_gap_y),
                 payout="5:1",
                 hit_shape="oval",
-                hit_coords=(x - 13, street_y - 13, x + 13, street_y + 13),
+                hit_coords=(x - 13, marker_gap_y - 13, x + 13, marker_gap_y + 13),
                 has_marker=True,
             )
 
         zero_x = left - self.zero_gap / 2
-        self._create_zero_special_bets(top, bottom, zero_x)
+        self._create_zero_special_bets(top, bottom, zero_x, marker_gap_y)
 
-    def _create_zero_special_bets(self, top, bottom, zero_x):
+    def _create_zero_special_bets(self, top, bottom, zero_x, marker_gap_y):
         if self._is_triple_zero_wheel():
             def hit_bounds(spot_id, fallback_center):
                 spot = self.spots.get(spot_id)
@@ -3818,7 +3818,7 @@ class RouletteBoardApp:
             hidden_marker_spots = {"split_000_0", "split_000_00", "split_0_00", "trio_000_00_0"}
             for spot_id, label, center in split_specs:
                 cx, cy = center
-                self._draw_bet_marker(cx, cy, visible=(spot_id not in hidden_marker_spots))
+                self._draw_bet_marker(cx, cy, visible=(spot_id not in hidden_marker_spots), color="#2563eb")
                 self._add_spot(
                     spot_id,
                     label,
@@ -3834,7 +3834,7 @@ class RouletteBoardApp:
             ]
             for spot_id, label, center in zero_pair_specs:
                 cx, cy = center
-                self._draw_bet_marker(cx, cy, visible=(spot_id not in hidden_marker_spots))
+                self._draw_bet_marker(cx, cy, visible=(spot_id not in hidden_marker_spots), color="#2563eb")
                 self._add_spot(
                     spot_id,
                     label,
@@ -3868,7 +3868,7 @@ class RouletteBoardApp:
             ]
             for spot_id, label, center in trio_specs:
                 cx, cy = center
-                self._draw_bet_marker(cx, cy, visible=(spot_id not in hidden_marker_spots))
+                self._draw_bet_marker(cx, cy, visible=(spot_id not in hidden_marker_spots), color="#d946ef")
                 self._add_spot(
                     spot_id,
                     label,
@@ -3880,8 +3880,8 @@ class RouletteBoardApp:
                 )
 
             # Center basket on the 0|1 gap line for triple-zero.
-            basket_center = (gap_x, bottom)
-            self._draw_bet_marker(basket_center[0], basket_center[1], visible=True)
+            basket_center = (gap_x, marker_gap_y)
+            self._draw_bet_marker(basket_center[0], basket_center[1], visible=True, color="#f97316")
             self._add_spot(
                 "basket_000_00_0_1_2_3",
                 "Basket 000/00/0/1/2/3",
@@ -3907,7 +3907,7 @@ class RouletteBoardApp:
                     continue
                 y = top + ((overlap_start + overlap_end) / 2.0) * self.cell_h
                 number = self._number_at(0, row)
-                self._draw_bet_marker(zero_x, y, visible=True)
+                self._draw_bet_marker(zero_x, y, visible=True, color="#2563eb")
                 self._add_spot(
                     f"split_{token}_{number}",
                     f"Split {token}/{number}",
@@ -3952,7 +3952,7 @@ class RouletteBoardApp:
                 ("trio_0_1_2", "Trio 0/1/2", top + 2.0 * self.cell_h),
             ]
             for spot_id, label, y in trio_specs:
-                self._draw_bet_marker(zero_x, y, visible=True)
+                self._draw_bet_marker(zero_x, y, visible=True, color="#d946ef")
                 self._add_spot(
                     spot_id,
                     label,
@@ -3972,7 +3972,7 @@ class RouletteBoardApp:
                 ("trio_0_1_2", "Trio 0/1/2", top + 2.0 * self.cell_h),
             ]
             for spot_id, label, y in trio_specs:
-                self._draw_bet_marker(zero_x, y, visible=True)
+                self._draw_bet_marker(zero_x, y, visible=True, color="#d946ef")
                 self._add_spot(
                     spot_id,
                     label,
@@ -3987,14 +3987,14 @@ class RouletteBoardApp:
             basket_label = "Basket 0/1/2/3"
             basket_payout = "8:1"
 
-        self._draw_bet_marker(zero_x, bottom, visible=True)
+        self._draw_bet_marker(zero_x, marker_gap_y, visible=True, color="#f97316")
         self._add_spot(
             basket_id,
             basket_label,
-            (zero_x, bottom),
+            (zero_x, marker_gap_y),
             payout=basket_payout,
             hit_shape="oval",
-            hit_coords=(zero_x - 13, bottom - 13, zero_x + 13, bottom + 13),
+            hit_coords=(zero_x - 13, marker_gap_y - 13, zero_x + 13, marker_gap_y + 13),
             has_marker=True,
         )
 
@@ -5006,7 +5006,7 @@ class RouletteBoardApp:
         self._refresh_legend_highlight()
         self._refresh_payout_chart()
 
-    def _draw_bet_marker(self, x, y, radius=4, visible=False):
+    def _draw_bet_marker(self, x, y, radius=4, visible=False, color="#f1f5f9"):
         if not visible:
             return
         self.canvas.create_oval(
@@ -5014,9 +5014,9 @@ class RouletteBoardApp:
             y - radius,
             x + radius,
             y + radius,
-            outline="#f1f5f9",
+            outline="#f8fafc",
             width=1,
-            fill="",
+            fill=color,
         )
 
     def _refresh_legend_highlight(self):
