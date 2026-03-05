@@ -1,0 +1,11 @@
+task_id,task,owner,status,due_date,blocked_by,notes
+1,Choose email provider (Google Workspace / M365),ops,completed,2026-03-02,,Chosen Google Workspace (recommended)
+2,Create support@ mailbox,ops,not-started,2026-03-02,1,Decide shared mailbox vs user
+3,Create billing@ mailbox,ops,not-started,2026-03-02,1,
+4,Create legal@ mailbox,ops,not-started,2026-03-02,1,
+5,Prepare SPF/DKIM/DMARC records,ops,not-started,2026-03-02,2,See docs/dns_email_auth_worksheet.md
+6,Upload DNS records to registrar,ops,not-started,2026-03-03,5,Do not apply without approval
+7,Provision business phone number (Google Voice),ops,not-started,2026-03-02,1,Decide Starter vs Standard
+8,Configure call flow and voicemail,ops,not-started,2026-03-02,7,See runbook
+9,Publish contact details to website,web,not-started,2026-03-02,2,Use copy pack
+10,Run QA checklist,qa,not-started,2026-03-03,8,See reports/business_contact_qa_checklist.md

@@ -1,0 +1,228 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gambling-excellene.local/schemas/strategy_config.schema.json",
+  "title": "Gambling Excellene Roulette Strategy Config",
+  "description": "Canonical strategy configuration for builder, simulator, and validator pipelines.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "metadata",
+    "roulette",
+    "bankroll",
+    "table_limits",
+    "session_rules",
+    "bet_plan",
+    "simulation",
+    "compliance"
+  ],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy_id", "name", "version", "created_utc"],
+      "properties": {
+        "strategy_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_\\-]{3,64}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "created_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "maxItems": 30,
+          "uniqueItems": true
+        }
+      }
+    },
+    "roulette": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["table_type"],
+      "properties": {
+        "table_type": {
+          "type": "string",
+          "enum": ["american", "european"]
+        },
+        "wheel_bias_model": {
+          "type": "string",
+          "enum": ["fair", "empirical"],
+          "default": "fair"
+        }
+      }
+    },
+    "bankroll": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["starting_bankroll", "currency", "base_unit"],
+      "properties": {
+        "starting_bankroll": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "default": "USD"
+        },
+        "base_unit": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "table_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_bet", "max_bet_per_spot"],
+      "properties": {
+        "min_bet": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_bet_per_spot": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_total_bet_per_spin": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "session_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_spins", "stop_loss", "stop_win"],
+      "properties": {
+        "max_spins": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stop_loss": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stop_win": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_drawdown_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "cooldown_spins_after_loss_streak": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "bet_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entries", "progression"],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["spot_id", "units"],
+            "properties": {
+              "spot_id": {
+                "type": "string",
+                "pattern": "^(straight_(00|0|[1-9]|[12][0-9]|3[0-6])|split_[a-z0-9_]+|corner_[0-9_]+|street_[1-9]|street_1[0-2]|sixline_[1-9]_[1-9]|sixline_1[0-1]_1[1-2]|column_[1-3]|dozen_[1-3]|outside_(1_18|even|red|black|odd|19_36)|topline_0_00_1_2_3|trio_[a-z0-9_]+|basket_0_1_2_3)$"
+              },
+              "units": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          }
+        },
+        "progression": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["flat", "martingale", "reverse_martingale", "dalembert", "fibonacci", "custom"]
+            },
+            "step_up_after_loss": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "step_down_after_win": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_multiplier": {
+              "type": "number",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trials", "spins_per_trial"],
+      "properties": {
+        "trials": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "spins_per_trial": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "seed": {
+          "type": ["integer", "null"]
+        }
+      }
+    },
+    "compliance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entertainment_only", "disclaimer_accepted"],
+      "properties": {
+        "entertainment_only": {
+          "type": "boolean",
+          "const": true
+        },
+        "disclaimer_accepted": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    }
+  }
+}

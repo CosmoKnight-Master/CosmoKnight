@@ -1,0 +1,7 @@
+{
+  "suite": "basic_system_validator",
+  "total_scenarios": 12,
+  "failed": 0,
+  "passed": 12,
+  "failures": []
+}

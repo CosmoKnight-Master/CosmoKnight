@@ -1,0 +1,331 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [ 4 0 R 6 0 R 8 0 R ] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2422 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 760 Td
+(Gambling Excellence - Business Entity, Licensing, and Website Launch Plan) Tj
+T*
+(Date: March 2, 2026) Tj
+T*
+(Location Assumption: Las Vegas / Clark County, Nevada) Tj
+T*
+() Tj
+T*
+(Purpose) Tj
+T*
+(This document is the execution sequence and budget baseline to launch Gambling Excellence as a) Tj
+T*
+(legal Nevada business and sell digital products online.) Tj
+T*
+() Tj
+T*
+(Important Compliance Positioning) Tj
+T*
+(Sell education/software/tools for roulette analysis.) Tj
+T*
+(Do NOT accept wagers, hold player funds, or represent guaranteed gambling outcomes.) Tj
+T*
+(If product scope expands into casino operator systems or wagering infrastructure, request Nevada) Tj
+T*
+(gaming-regulatory counsel review before launch.) Tj
+T*
+() Tj
+T*
+(Step 1 - Confirm Licensing Jurisdiction \(Day 1\)) Tj
+T*
+(Action: Determine whether your business address is in City of Las Vegas or unincorporated Clark) Tj
+T*
+(County.) Tj
+T*
+(Cost: $0) Tj
+T*
+(Why first: Local license process and fee category depends on jurisdiction.) Tj
+T*
+() Tj
+T*
+(Step 2 - Form Nevada LLC via SilverFlume \(Day 1-2\)) Tj
+T*
+(Action: Form LLC and submit required startup filings together.) Tj
+T*
+(State filing costs \(commonly used amounts\):) Tj
+T*
+(- Articles of Organization: $75) Tj
+T*
+(- Initial List: $150) Tj
+T*
+(- Nevada State Business License: $200) Tj
+T*
+(Base total: $425) Tj
+T*
+(If paying online card \(2.5% processing on portal references\): about $10.63) Tj
+T*
+(Estimated total at filing: about $435.63) Tj
+T*
+() Tj
+T*
+(Step 3 - EIN from IRS \(Day 1-2\)) Tj
+T*
+(Action: Apply on IRS EIN online portal.) Tj
+T*
+(Cost: $0 \(IRS states EIN is free\)) Tj
+T*
+() Tj
+T*
+(Step 4 - DBA / Fictitious Firm Name if needed \(Day 2-5\)) Tj
+T*
+(When needed: If public brand differs from legal LLC name.) Tj
+T*
+(Clark County Clerk fee reference: FFN filing $25.) Tj
+T*
+(Cost: $0 if not needed, else about $25.) Tj
+T*
+() Tj
+T*
+(Step 5 - Local Business License \(Day 3-10\)) Tj
+T*
+(Action: Apply under correct jurisdiction and category.) Tj
+T*
+(Clark County references show a one-time application fee of $45 plus category-based business) Tj
+T*
+(license fee.) Tj
+T*
+(Estimated filing cash to reserve now: $45 to $300+ \(category dependent\).) Tj
+T*
+(Working budget placeholder: $195 \(=$45 application + $150 category fee\) until jurisdiction) Tj
+T*
+(confirms exact amount.) Tj
+T*
+() Tj
+T*
+(Step 6 - Banking + Basic Ops \(Day 5-12\)) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2784 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 760 Td
+(Action: Open business bank account, bookkeeping file structure, receipts retention process.) Tj
+T*
+(Cost: usually $0 to open, bank minimums vary by bank.) Tj
+T*
+() Tj
+T*
+(Step 7 - Website Go-Live Foundation \(Week 2\)) Tj
+T*
+(Action: Build launch website for GamblingExcellence.com.) Tj
+T*
+(Recommended start stack: Cloudflare Pages + custom domain + Stripe Payment Links.) Tj
+T*
+(Hosting cost: Cloudflare Pages Free = $0/month \(500 builds/month, custom domains, SSL\).) Tj
+T*
+(Optional upgrade later: Cloudflare Pro $25/month \(or $20/month billed annually\).) Tj
+T*
+() Tj
+T*
+(Step 8 - Payments \(Week 2\)) Tj
+T*
+(Action: Stripe account and payment links for digital offers.) Tj
+T*
+(Setup cost: $0) Tj
+T*
+(Processing cost \(US cards\): 2.9% + $0.30 per successful transaction \(domestic cards\).) Tj
+T*
+(Example fee: on a $49 sale -> about $1.72 fee, net about $47.28 before taxes.) Tj
+T*
+() Tj
+T*
+(Step 9 - Mandatory Website Pages \(Week 2\)) Tj
+T*
+(Publish: Home, Products, Pricing, About, Contact, Terms, Privacy, Responsible Gambling + No-) Tj
+T*
+(Guarantee Disclaimer.) Tj
+T*
+(Cost: $0 DIY, or attorney review if desired \(commonly $500-$2,000+, optional\).) Tj
+T*
+() Tj
+T*
+(Step 10 - Initial Product Launch \(Week 3\)) Tj
+T*
+(Action: Release first paid digital package and start controlled beta sales.) Tj
+T*
+(Cost: marketing spend optional. Start at $0-$200 test budget.) Tj
+T*
+() Tj
+T*
+(Budget Summary \(Cash Outlay\)) Tj
+T*
+(One-time required/near-required estimated at start:) Tj
+T*
+(- Nevada LLC package with card fee: about $435.63) Tj
+T*
+(- Local license placeholder until category confirmed: about $195) Tj
+T*
+(- EIN: $0) Tj
+T*
+(- DBA/FFN: $0 or $25) Tj
+T*
+(Lean startup expected cash: about $630.63 \(without FFN\) to about $655.63 \(with FFN\)) Tj
+T*
+() Tj
+T*
+(Optional startup items:) Tj
+T*
+(- Registered agent service \(if not self-serving and eligible\): often about $100-$300/year) Tj
+T*
+(- Legal review for terms/disclaimers: about $500-$2,000+) Tj
+T*
+(- Paid host upgrade: $25/month \(Cloudflare Pro monthly\) if needed) Tj
+T*
+() Tj
+T*
+(Recurring annual/operating costs to plan:) Tj
+T*
+(- Nevada annual list + state business license renewal commonly totals $350/year for LLC) Tj
+T*
+(- Domain renewal: varies by registrar/TLD \(estimate and verify in your registrar dashboard\)) Tj
+T*
+(- Payment processing: variable with sales volume) Tj
+T*
+() Tj
+T*
+(Affordability vs Income \($26/hour, full-time\)) Tj
+T*
+(Gross monthly approximation: 26 x 40 x 52 / 12 = about $4,506.67) Tj
+T*
+(Lean startup cash \($630.63-$655.63\) is about 14.0%-14.5% of one gross month.) Tj
+T*
+(Suggested reserve target before filing: $900) Tj
+T*
+(Reason: covers filing costs + buffer for local license variance and one-month operating float.) Tj
+T*
+() Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2155 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 760 Td
+(Execution Order Checklist) Tj
+T*
+(1\) Jurisdiction lookup) Tj
+T*
+(2\) LLC formation package in SilverFlume) Tj
+T*
+(3\) EIN) Tj
+T*
+(4\) FFN only if needed) Tj
+T*
+(5\) Local business license) Tj
+T*
+(6\) Bank setup) Tj
+T*
+(7\) Website build and deploy) Tj
+T*
+(8\) Stripe links and product pages) Tj
+T*
+(9\) Legal pages + disclaimers) Tj
+T*
+(10\) Beta launch) Tj
+T*
+() Tj
+T*
+(Data-quality notes) Tj
+T*
+(- Some local licensing categories are fee-variable by NAICS and/or gross revenue; confirm exact) Tj
+T*
+(category with city/county licensing technician before payment.) Tj
+T*
+(- State fee figures above are commonly cited and should be verified in SilverFlume checkout at the) Tj
+T*
+(time of filing.) Tj
+T*
+() Tj
+T*
+(Primary sources checked \(accessed March 2, 2026\)) Tj
+T*
+(- IRS EIN online \(free\): https://www.irs.gov/Businesses/Small-Businesses-%26-Self-Employed/Apply-) Tj
+T*
+(for-an-Employer-Identification-Number-%28EIN%29-Online) Tj
+T*
+(- Cloudflare Pages pricing: https://pages.cloudflare.com/) Tj
+T*
+(- Cloudflare Pages limits: https://developers.cloudflare.com/pages/platform/limits/) Tj
+T*
+(- Stripe pricing: https://stripe.com/us/pricing) Tj
+T*
+(- Clark County Business License Fees overview:) Tj
+T*
+(https://www.clarkcountynv.gov/business/doing_business_with_clark_county/business-license-fees) Tj
+T*
+(- Clark County General License Guide \(with category fee list link\): https://www.clarkcountynv.gov/) Tj
+T*
+(business/doing_business_with_clark_county/divisions/general_business/general_license_guide.php) Tj
+T*
+(- Clark County licensing portal \(jurisdiction + card convenience fee\):) Tj
+T*
+(https://blepay.clarkcountynv.gov/) Tj
+T*
+(- Clark County Clerk FFN info:) Tj
+T*
+(https://www.clarkcountynv.gov/government/elected_officials/county_clerk/fictitious-firm-name) Tj
+T*
+(- Clark County Clerk fees page \(FFN $25\):) Tj
+T*
+(https://webfiles.clarkcountynv.gov/government/elected_officials/county_clerk/fees.php) Tj
+T*
+(- FinCEN BOI status alert \(domestic entities exempt as of Mar 26, 2025 IFR\):) Tj
+T*
+(https://www.fincen.gov/beneficial-ownership-information-reporting) Tj
+T*
+() Tj
+T*
+(End of plan.) Tj
+ET
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000129 00000 n 
+0000000199 00000 n 
+0000000325 00000 n 
+0000002799 00000 n 
+0000002925 00000 n 
+0000005761 00000 n 
+0000005887 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+8094
+%%EOF
