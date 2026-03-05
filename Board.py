@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import re
 import tkinter as tk
@@ -126,11 +127,26 @@ class RouletteBoardApp:
         "Switch Stage",
     )
     STAGE_TRIGGER_ACTION_SCOPES = ("This Trigger", "Group")
+    SETTINGS_VERSION = 1
+    SETTINGS_FILE = "board_settings.json"
+    SETTINGS_DEFAULT_FILE = "board_settings.default.json"
+    SETTINGS_SCHEMA_FILE = "board_settings.schema.json"
 
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Las Vegas Roulette Board")
-        self.root.configure(bg="#FFFFFF")
+        self.board_settings = {}
+        self.board_settings_path = ""
+        self.board_settings_default_path = ""
+        self.board_settings_schema_path = ""
+        self.settings_status_var = None
+        self.settings_theme_board_var = None
+        self.settings_theme_surround_var = None
+        self.settings_popup_enabled_var = None
+        self.settings_popup_mode_var = None
+        self.settings_popup_delay_var = None
+        self._init_board_settings()
+        self.root.configure(bg=self._surround_color())
 
         self.selected_chip = tk.IntVar(value=1)
         self.spots = {}
@@ -140,19 +156,23 @@ class RouletteBoardApp:
 
         self.tooltip = tk.Label(
             self.root,
-            bg="#111827",
-            fg="#f9fafb",
+            bg=self._popup_background_color(),
+            fg=self._popup_text_color(),
             bd=1,
             relief="solid",
             padx=8,
             pady=4,
             font=("Segoe UI", 10, "bold"),
+            highlightthickness=1,
+            highlightbackground=self._popup_border_color(),
         )
         self.tooltip.place_forget()
         self.chip_add_popup_after_id = None
         self.hover_popup_until_motion = False
         self.hover_popup_origin = None
         self.chip_hover_fallback_spot_id = None
+        self.hover_popup_after_id = None
+        self.hover_popup_pending_spot_id = None
 
         self.total_var = tk.StringVar(value="Total Bets: $0")
         self.map_pad = 8
@@ -168,7 +188,9 @@ class RouletteBoardApp:
         self._build_board_screen()
         self._build_system_creator_screen()
         self._build_testing_screen()
+        self._build_settings_screen()
         self._show_screen("board")
+        self._apply_board_settings_runtime(rebuild_board=False)
 
         self._align_spin_map_right()
         self._refresh_payout_chart()
@@ -255,6 +277,8 @@ class RouletteBoardApp:
         self.call_bets_display_host = None
         self.call_bets_display_inner = None
         self.call_bets_display_row = None
+        self.call_bets_spacer = None
+        self.call_bets_reserved_h = 0
         self.call_bets_left_panel = None
         self.call_bets_right_panel = None
         self.call_bets_listbox_left = None
@@ -289,15 +313,245 @@ class RouletteBoardApp:
         self.marker_popup_spot_id = None
         self._reset_session_counters(from_init=True)
 
+    def _default_board_settings(self):
+        return {
+            "version": self.SETTINGS_VERSION,
+            "theme": {
+                "board_felt_color": "#0f7a36",
+                "surround_color": "#ffffff",
+            },
+            "hover_popup": {
+                "enabled": True,
+                "mode": "detailed",
+                "delay_ms": 0,
+                "style": {
+                    "background_color": "#111827",
+                    "text_color": "#f9fafb",
+                    "border_color": "#111111",
+                },
+            },
+        }
+
+    def _init_board_settings(self):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.board_settings_path = os.path.join(base_dir, self.SETTINGS_FILE)
+        self.board_settings_default_path = os.path.join(base_dir, self.SETTINGS_DEFAULT_FILE)
+        self.board_settings_schema_path = os.path.join(base_dir, self.SETTINGS_SCHEMA_FILE)
+
+        base_settings = self._default_board_settings()
+        file_defaults = self._load_json_object(self.board_settings_default_path)
+        if file_defaults:
+            base_settings = self._deep_merge_dict(base_settings, file_defaults)
+
+        user_settings = self._load_json_object(self.board_settings_path)
+        merged = self._deep_merge_dict(base_settings, user_settings or {})
+        merged = self._migrate_board_settings(merged)
+        self.board_settings = self._normalize_board_settings(merged)
+
+    @staticmethod
+    def _load_json_object(path):
+        if not path or not os.path.isfile(path):
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _migrate_board_settings(self, payload):
+        if not isinstance(payload, dict):
+            return self._default_board_settings()
+        version = self._safe_int(payload.get("version"), 0)
+        if version <= 0:
+            payload["version"] = self.SETTINGS_VERSION
+            return payload
+        if version < self.SETTINGS_VERSION:
+            payload["version"] = self.SETTINGS_VERSION
+        return payload
+
+    def _normalize_board_settings(self, payload):
+        defaults = self._default_board_settings()
+        merged = self._deep_merge_dict(defaults, payload if isinstance(payload, dict) else {})
+        theme = merged.get("theme", {})
+        if not isinstance(theme, dict):
+            theme = {}
+        hover_popup = merged.get("hover_popup", {})
+        if not isinstance(hover_popup, dict):
+            hover_popup = {}
+        hover_style = hover_popup.get("style", {})
+        if not isinstance(hover_style, dict):
+            hover_style = {}
+
+        normalized = {
+            "version": self.SETTINGS_VERSION,
+            "theme": {
+                "board_felt_color": self._normalize_hex_color(
+                    theme.get("board_felt_color"),
+                    defaults["theme"]["board_felt_color"],
+                ),
+                "surround_color": self._normalize_hex_color(
+                    theme.get("surround_color"),
+                    defaults["theme"]["surround_color"],
+                ),
+            },
+            "hover_popup": {
+                "enabled": bool(hover_popup.get("enabled", defaults["hover_popup"]["enabled"])),
+                "mode": str(hover_popup.get("mode", defaults["hover_popup"]["mode"])).strip().lower(),
+                "delay_ms": self._safe_int(
+                    hover_popup.get("delay_ms", defaults["hover_popup"]["delay_ms"]),
+                    defaults["hover_popup"]["delay_ms"],
+                ),
+                "style": {
+                    "background_color": self._normalize_hex_color(
+                        hover_style.get("background_color"),
+                        defaults["hover_popup"]["style"]["background_color"],
+                    ),
+                    "text_color": self._normalize_hex_color(
+                        hover_style.get("text_color"),
+                        defaults["hover_popup"]["style"]["text_color"],
+                    ),
+                    "border_color": self._normalize_hex_color(
+                        hover_style.get("border_color"),
+                        defaults["hover_popup"]["style"]["border_color"],
+                    ),
+                },
+            },
+        }
+
+        if normalized["hover_popup"]["mode"] not in {"compact", "detailed"}:
+            normalized["hover_popup"]["mode"] = defaults["hover_popup"]["mode"]
+        normalized["hover_popup"]["delay_ms"] = max(0, min(3000, normalized["hover_popup"]["delay_ms"]))
+        return normalized
+
+    @staticmethod
+    def _deep_merge_dict(base, override):
+        result = {}
+        base = base if isinstance(base, dict) else {}
+        override = override if isinstance(override, dict) else {}
+        for key, value in base.items():
+            if isinstance(value, dict):
+                result[key] = RouletteBoardApp._deep_merge_dict(value, override.get(key))
+            else:
+                result[key] = value
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = RouletteBoardApp._deep_merge_dict(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    @staticmethod
+    def _normalize_hex_color(value, fallback):
+        text = str(value).strip() if value is not None else ""
+        if re.fullmatch(r"#[0-9A-Fa-f]{6}", text):
+            return text.lower()
+        return fallback
+
+    def _sync_settings_controls_from_state(self):
+        if self.settings_theme_board_var is not None:
+            self.settings_theme_board_var.set(self._board_felt_color())
+        if self.settings_theme_surround_var is not None:
+            self.settings_theme_surround_var.set(self._surround_color())
+        if self.settings_popup_enabled_var is not None:
+            self.settings_popup_enabled_var.set(self._popup_enabled())
+        if self.settings_popup_mode_var is not None:
+            self.settings_popup_mode_var.set(self._popup_mode())
+        if self.settings_popup_delay_var is not None:
+            self.settings_popup_delay_var.set(str(self._popup_delay_ms()))
+
+    def _apply_settings_from_controls(self):
+        if self.settings_theme_board_var is None:
+            return
+
+        next_payload = self._deep_merge_dict(
+            self.board_settings,
+            {
+                "version": self.SETTINGS_VERSION,
+                "theme": {
+                    "board_felt_color": self.settings_theme_board_var.get().strip(),
+                    "surround_color": self.settings_theme_surround_var.get().strip(),
+                },
+                "hover_popup": {
+                    "enabled": bool(self.settings_popup_enabled_var.get()),
+                    "mode": self.settings_popup_mode_var.get().strip().lower(),
+                    "delay_ms": self._safe_int(self.settings_popup_delay_var.get(), 0),
+                },
+            },
+        )
+        self.board_settings = self._normalize_board_settings(next_payload)
+        self._sync_settings_controls_from_state()
+        self._apply_board_settings_runtime(rebuild_board=True)
+        if self.settings_status_var is not None:
+            self.settings_status_var.set(
+                f"Applied settings in memory. Click Save to persist to {self.board_settings_path}"
+            )
+
+    def _save_board_settings_to_disk(self):
+        self._apply_settings_from_controls()
+        try:
+            with open(self.board_settings_path, "w", encoding="utf-8") as f:
+                json.dump(self.board_settings, f, indent=2)
+            if self.settings_status_var is not None:
+                self.settings_status_var.set(f"Saved settings to {self.board_settings_path}")
+            self._append_log(f"Saved board settings: {self.board_settings_path}")
+        except OSError as exc:
+            messagebox.showerror("Settings Save Failed", str(exc))
+
+    def _apply_board_settings_runtime(self, rebuild_board=True):
+        surround_color = self._surround_color()
+        self.root.configure(bg=surround_color)
+        if hasattr(self, "screen_host") and self.screen_host is not None:
+            self.screen_host.configure(bg=surround_color)
+        if hasattr(self, "canvas") and self.canvas is not None:
+            self.canvas.configure(bg=surround_color)
+        if hasattr(self, "tooltip") and self.tooltip is not None:
+            self.tooltip.configure(
+                bg=self._popup_background_color(),
+                fg=self._popup_text_color(),
+                highlightbackground=self._popup_border_color(),
+            )
+        if rebuild_board and hasattr(self, "canvas") and self.canvas is not None:
+            self._rebuild_board_for_wheel()
+        self._sync_settings_controls_from_state()
+
+    def _board_felt_color(self):
+        return self.board_settings.get("theme", {}).get("board_felt_color", "#0f7a36")
+
+    def _surround_color(self):
+        return self.board_settings.get("theme", {}).get("surround_color", "#ffffff")
+
+    def _popup_enabled(self):
+        return bool(self.board_settings.get("hover_popup", {}).get("enabled", True))
+
+    def _popup_mode(self):
+        mode = str(self.board_settings.get("hover_popup", {}).get("mode", "detailed")).strip().lower()
+        return mode if mode in {"compact", "detailed"} else "detailed"
+
+    def _popup_delay_ms(self):
+        delay = self._safe_int(self.board_settings.get("hover_popup", {}).get("delay_ms", 0), 0)
+        return max(0, min(3000, delay))
+
+    def _popup_background_color(self):
+        return self.board_settings.get("hover_popup", {}).get("style", {}).get("background_color", "#111827")
+
+    def _popup_text_color(self):
+        return self.board_settings.get("hover_popup", {}).get("style", {}).get("text_color", "#f9fafb")
+
+    def _popup_border_color(self):
+        return self.board_settings.get("hover_popup", {}).get("style", {}).get("border_color", "#111111")
+
     def _build_navigation(self):
         nav = tk.Frame(self.root, bg="#e5e7eb")
         nav.pack(fill="x", padx=12, pady=(8, 6))
+        self.nav_frame = nav
         self.nav_buttons = {}
 
         nav_specs = (
             ("board", "Board"),
             ("system", "System Creator"),
             ("testing", "Testing / Evaluation"),
+            ("settings", "Settings"),
         )
         for screen_key, label in nav_specs:
             btn = tk.Button(
@@ -320,6 +574,7 @@ class RouletteBoardApp:
             "board": tk.Frame(self.screen_host, bg="#FFFFFF"),
             "system": tk.Frame(self.screen_host, bg="#FFFFFF"),
             "testing": tk.Frame(self.screen_host, bg="#FFFFFF"),
+            "settings": tk.Frame(self.screen_host, bg="#FFFFFF"),
         }
 
     def _build_board_screen(self):
@@ -386,6 +641,130 @@ class RouletteBoardApp:
             anchor="nw",
             font=("Segoe UI", 10),
         ).pack(fill="x")
+
+    def _build_settings_screen(self):
+        settings_screen = self.screens["settings"]
+
+        heading = tk.Label(
+            settings_screen,
+            text="Settings",
+            bg="#FFFFFF",
+            fg="#111827",
+            font=("Segoe UI", 13, "bold"),
+            anchor="w",
+        )
+        heading.pack(fill="x", padx=12, pady=(10, 6))
+
+        content = tk.Frame(settings_screen, bg="#FFFFFF")
+        content.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+
+        appearance = tk.LabelFrame(
+            content,
+            text="Board Appearance",
+            bg="#FFFFFF",
+            fg="#111827",
+            padx=10,
+            pady=10,
+            font=("Segoe UI", 10, "bold"),
+        )
+        appearance.pack(fill="x", anchor="nw")
+
+        self.settings_theme_board_var = tk.StringVar(value=self._board_felt_color())
+        self.settings_theme_surround_var = tk.StringVar(value=self._surround_color())
+
+        row1 = tk.Frame(appearance, bg="#FFFFFF")
+        row1.pack(anchor="w", pady=(0, 6))
+        tk.Label(row1, text="Board felt color (#RRGGBB)", bg="#FFFFFF", fg="#111827", font=("Segoe UI", 9)).pack(side="left")
+        tk.Entry(row1, textvariable=self.settings_theme_board_var, width=12).pack(side="left", padx=(8, 0))
+
+        row2 = tk.Frame(appearance, bg="#FFFFFF")
+        row2.pack(anchor="w")
+        tk.Label(row2, text="Surround color (#RRGGBB)", bg="#FFFFFF", fg="#111827", font=("Segoe UI", 9)).pack(side="left")
+        tk.Entry(row2, textvariable=self.settings_theme_surround_var, width=12).pack(side="left", padx=(18, 0))
+
+        popup = tk.LabelFrame(
+            content,
+            text="Hover Popup",
+            bg="#FFFFFF",
+            fg="#111827",
+            padx=10,
+            pady=10,
+            font=("Segoe UI", 10, "bold"),
+        )
+        popup.pack(fill="x", anchor="nw", pady=(10, 0))
+
+        self.settings_popup_enabled_var = tk.BooleanVar(value=self._popup_enabled())
+        self.settings_popup_mode_var = tk.StringVar(value=self._popup_mode())
+        self.settings_popup_delay_var = tk.StringVar(value=str(self._popup_delay_ms()))
+
+        row3 = tk.Frame(popup, bg="#FFFFFF")
+        row3.pack(anchor="w")
+        tk.Checkbutton(
+            row3,
+            text="Enable hover popups",
+            variable=self.settings_popup_enabled_var,
+            bg="#FFFFFF",
+            fg="#111827",
+            activebackground="#FFFFFF",
+            activeforeground="#111827",
+            selectcolor="#FFFFFF",
+            font=("Segoe UI", 9),
+        ).pack(side="left")
+
+        row4 = tk.Frame(popup, bg="#FFFFFF")
+        row4.pack(anchor="w", pady=(8, 0))
+        tk.Label(row4, text="Popup mode", bg="#FFFFFF", fg="#111827", font=("Segoe UI", 9)).pack(side="left")
+        ttk.Combobox(
+            row4,
+            textvariable=self.settings_popup_mode_var,
+            values=("compact", "detailed"),
+            width=10,
+            state="readonly",
+        ).pack(side="left", padx=(8, 18))
+        tk.Label(row4, text="Delay (ms)", bg="#FFFFFF", fg="#111827", font=("Segoe UI", 9)).pack(side="left")
+        tk.Entry(row4, textvariable=self.settings_popup_delay_var, width=8).pack(side="left", padx=(8, 0))
+
+        actions = tk.Frame(content, bg="#FFFFFF")
+        actions.pack(fill="x", pady=(12, 0))
+        tk.Button(
+            actions,
+            text="Apply",
+            command=self._apply_settings_from_controls,
+            bg="#2563eb",
+            fg="#ffffff",
+            activebackground="#1d4ed8",
+            activeforeground="#ffffff",
+            relief="raised",
+            bd=2,
+            font=("Segoe UI", 10, "bold"),
+            padx=12,
+            pady=5,
+        ).pack(side="left")
+        tk.Button(
+            actions,
+            text="Save",
+            command=self._save_board_settings_to_disk,
+            bg="#0f766e",
+            fg="#ffffff",
+            activebackground="#115e59",
+            activeforeground="#ffffff",
+            relief="raised",
+            bd=2,
+            font=("Segoe UI", 10, "bold"),
+            padx=12,
+            pady=5,
+        ).pack(side="left", padx=(8, 0))
+
+        self.settings_status_var = tk.StringVar(value=f"Settings file: {self.board_settings_path}")
+        tk.Label(
+            content,
+            textvariable=self.settings_status_var,
+            bg="#FFFFFF",
+            fg="#334155",
+            font=("Segoe UI", 9),
+            anchor="w",
+            justify="left",
+        ).pack(fill="x", pady=(10, 0))
 
     def _show_screen(self, screen_key):
         self.active_screen = screen_key
@@ -2587,6 +2966,17 @@ class RouletteBoardApp:
         self.call_bets_listbox_right.bind("<Button-3>", self._on_call_bet_list_click_right)
         self.call_bets_listbox_right.bind("<Button-2>", self._on_call_bet_list_click_right)
 
+        self.call_bets_display_host.update_idletasks()
+        self.call_bets_reserved_h = max(1, self.call_bets_display_host.winfo_reqheight())
+        self.call_bets_spacer = tk.Frame(
+            self.legend_frame,
+            bg="#FFFFFF",
+            height=self.call_bets_reserved_h,
+            highlightthickness=0,
+            bd=0,
+        )
+        self.call_bets_spacer.pack_propagate(False)
+
         self._sync_wheel_option_controls()
         self._refresh_call_bets_list()
 
@@ -2650,13 +3040,19 @@ class RouletteBoardApp:
             if is_french:
                 self.call_bets_button.configure(state="normal")
             else:
+                self.call_bets_button.configure(state="disabled")
                 self._close_call_bet_popup()
         if self.call_bets_display_host is not None:
             if is_french:
+                if self.call_bets_spacer is not None and self.call_bets_spacer.winfo_manager():
+                    self.call_bets_spacer.pack_forget()
                 if not self.call_bets_display_host.winfo_manager():
                     self.call_bets_display_host.pack(anchor="w", pady=(3, 3))
             else:
-                self.call_bets_display_host.pack_forget()
+                if self.call_bets_display_host.winfo_manager():
+                    self.call_bets_display_host.pack_forget()
+                if self.call_bets_spacer is not None and not self.call_bets_spacer.winfo_manager():
+                    self.call_bets_spacer.pack(anchor="w", pady=(3, 3))
 
     def _position_call_bets_display_boxes(self):
         # Call-bet list boxes now live in-flow directly below the chip legend.
@@ -2961,7 +3357,7 @@ class RouletteBoardApp:
             parent,
             width=self.canvas_w,
             height=self.canvas_h,
-            bg="#FFFFFF",
+            bg=self._surround_color(),
             highlightthickness=0,
             bd=0,
         )
@@ -2982,13 +3378,17 @@ class RouletteBoardApp:
         self.zero_gap = self.column_gap
         base_column_w = 128 - 25
         self.column_bet_w = max(56, int(round(base_column_w * (2.0 / 3.0))))
-        # Triple-zero needs extra left width to support the triangular 000/00/0 layout.
-        self.zero_w = int(round(self.column_bet_w * 2.1)) if self._is_triple_zero_wheel() else self.column_bet_w
+        # Normalize every wheel to the triple-zero footprint width.
+        # Non-triple layouts keep a left spacer before the zero pockets.
+        self.zero_w = int(round(self.column_bet_w * 2.1))
+        self.zero_draw_w = self.zero_w if self._is_triple_zero_wheel() else self.column_bet_w
+        self.zero_left_spacer_w = max(0, self.zero_w - self.zero_draw_w)
         self.placed_chip_radius = 14
         self.marker_hover_radius = self.placed_chip_radius
         content_w = self.zero_w + self.zero_gap + self.cols * self.cell_w + self.column_gap + self.column_bet_w
         self.available_w = self.root.winfo_screenwidth() - 24
         self.board_x = int((self.available_w - content_w) / 2)
+        self.zero_cell_x = self.board_x + self.zero_left_spacer_w
 
         num_left = self.board_x + self.zero_w + self.zero_gap
         num_top = self.board_y
@@ -3006,7 +3406,7 @@ class RouletteBoardApp:
         self._draw_glass_swirl_background(frame_x1, frame_y1, frame_x2, frame_y2)
         self._draw_table_frame(frame_x1, frame_y1, frame_x2, frame_y2)
 
-        self._draw_zero_cell(self.board_x, num_top, self.zero_w, self.cell_h * 3)
+        self._draw_zero_cell(self.zero_cell_x, num_top, self.zero_draw_w, self.cell_h * 3)
         self._draw_number_grid(num_left, num_top)
         self._draw_column_bets(num_right, num_top)
         self._draw_bottom_outside_bets(num_left, num_bottom)
@@ -3039,7 +3439,7 @@ class RouletteBoardApp:
                 y1 = cy - box_h / 2
                 x2 = cx + box_w / 2
                 y2 = cy + box_h / 2
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill="#16a34a", outline="#d4af37", width=2)
+                self.canvas.create_rectangle(x1, y1, x2, y2, fill=self._board_felt_color(), outline="#d4af37", width=2)
                 self.canvas.create_text(
                     cx,
                     cy,
@@ -3060,7 +3460,7 @@ class RouletteBoardApp:
                 )
             return
 
-        self.canvas.create_rectangle(x, y, x + w, y + h, fill="#16a34a", outline="#d4af37", width=2)
+        self.canvas.create_rectangle(x, y, x + w, y + h, fill=self._board_felt_color(), outline="#d4af37", width=2)
         specs = self._zero_pocket_specs()
         cell_h = h / 3.0
         font_size = 26
@@ -3092,10 +3492,10 @@ class RouletteBoardApp:
             )
 
     def _draw_glass_swirl_background(self, table_x1, table_y1, table_x2, table_y2):
-        self.canvas.create_rectangle(0, 0, self.canvas_w, self.canvas_h, fill="#FFFFFF", outline="")
+        self.canvas.create_rectangle(0, 0, self.canvas_w, self.canvas_h, fill=self._surround_color(), outline="")
 
     def _draw_table_frame(self, x1, y1, x2, y2):
-        self.canvas.create_rectangle(x1, y1, x2, y2, fill="#0f7a36", outline="", width=0)
+        self.canvas.create_rectangle(x1, y1, x2, y2, fill=self._board_felt_color(), outline="", width=0)
 
         # Porcelain edge and light glaze highlight.
         self.canvas.create_rectangle(x1, y1, x2, y2, outline="#0b1b3b", width=8)
@@ -3338,12 +3738,30 @@ class RouletteBoardApp:
                     return (lo + hi) / 2.0
                 return float(fallback)
 
-            p_000 = self.spots.get("straight_000", {}).get("center", (self.board_x + self.zero_w * 0.30, top + 1.50 * self.cell_h))
-            p_00 = self.spots.get("straight_00", {}).get("center", (self.board_x + self.zero_w * 0.72, top + 0.95 * self.cell_h))
-            p_0 = self.spots.get("straight_0", {}).get("center", (self.board_x + self.zero_w * 0.72, top + 2.05 * self.cell_h))
-            p_3 = self.spots.get("straight_3", {}).get("center", (self.board_x + self.zero_w + self.zero_gap + (self.cell_w / 2), top + 0.5 * self.cell_h))
-            p_2 = self.spots.get("straight_2", {}).get("center", (self.board_x + self.zero_w + self.zero_gap + (self.cell_w / 2), top + 1.5 * self.cell_h))
-            p_1 = self.spots.get("straight_1", {}).get("center", (self.board_x + self.zero_w + self.zero_gap + (self.cell_w / 2), top + 2.5 * self.cell_h))
+            p_000 = self.spots.get("straight_000", {}).get(
+                "center",
+                (self.zero_cell_x + self.zero_draw_w * 0.30, top + 1.50 * self.cell_h),
+            )
+            p_00 = self.spots.get("straight_00", {}).get(
+                "center",
+                (self.zero_cell_x + self.zero_draw_w * 0.72, top + 0.95 * self.cell_h),
+            )
+            p_0 = self.spots.get("straight_0", {}).get(
+                "center",
+                (self.zero_cell_x + self.zero_draw_w * 0.72, top + 2.05 * self.cell_h),
+            )
+            p_3 = self.spots.get("straight_3", {}).get(
+                "center",
+                (self.zero_cell_x + self.zero_draw_w + self.zero_gap + (self.cell_w / 2), top + 0.5 * self.cell_h),
+            )
+            p_2 = self.spots.get("straight_2", {}).get(
+                "center",
+                (self.zero_cell_x + self.zero_draw_w + self.zero_gap + (self.cell_w / 2), top + 1.5 * self.cell_h),
+            )
+            p_1 = self.spots.get("straight_1", {}).get(
+                "center",
+                (self.zero_cell_x + self.zero_draw_w + self.zero_gap + (self.cell_w / 2), top + 2.5 * self.cell_h),
+            )
 
             b_000 = hit_bounds("straight_000", p_000)
             b_00 = hit_bounds("straight_00", p_00)
@@ -3501,7 +3919,7 @@ class RouletteBoardApp:
                 )
 
         # Splits between adjacent zero pockets.
-        zero_mid_x = self.board_x + self.zero_w / 2
+        zero_mid_x = self.zero_cell_x + self.zero_draw_w / 2
         for idx in range(len(zero_specs) - 1):
             token_a = zero_specs[idx]["token"]
             token_b = zero_specs[idx + 1]["token"]
@@ -4143,13 +4561,51 @@ class RouletteBoardApp:
             return spot_id
         return self._nearest_marker_spot(event)
 
+    def _cancel_hover_popup_schedule(self):
+        if self.hover_popup_after_id is not None:
+            try:
+                self.root.after_cancel(self.hover_popup_after_id)
+            except tk.TclError:
+                pass
+            self.hover_popup_after_id = None
+        self.hover_popup_pending_spot_id = None
+
+    def _schedule_hover_popup(self, spot_id, callback):
+        self._cancel_hover_popup_schedule()
+        delay = self._popup_delay_ms()
+        if delay <= 0:
+            callback()
+            return
+
+        self.hover_popup_pending_spot_id = spot_id
+
+        def _run():
+            self.hover_popup_after_id = None
+            if self.hover_popup_pending_spot_id != spot_id:
+                return
+            callback()
+
+        self.hover_popup_after_id = self.root.after(delay, _run)
+
     def _show_marker_label_popup(self, spot_id):
+        if not self._popup_enabled():
+            self._hide_tooltip()
+            self._hide_chip_add_popup()
+            return
         if spot_id not in self.spots:
             return
         if self.marker_popup_spot_id == spot_id and self.canvas.find_withtag("chip_add_popup"):
             return
         popup_text = self._format_hover_popup_text(spot_id)
-        self._show_chip_add_popup(spot_id, popup_text=popup_text, keep_tooltip=False, duration_ms=None)
+        self._schedule_hover_popup(
+            spot_id,
+            lambda sid=spot_id, text=popup_text: self._show_chip_add_popup(
+                sid,
+                popup_text=text,
+                keep_tooltip=False,
+                duration_ms=None,
+            ),
+        )
         self.marker_popup_spot_id = spot_id
 
     def _format_hover_popup_text(self, spot_id, spot_total=None):
@@ -4176,6 +4632,12 @@ class RouletteBoardApp:
         self._show_chip_add_popup(spot_id, popup_text=f"${spot_total:,}", duration_ms=500)
 
     def _on_spot_enter(self, spot_id, event):
+        if not self._popup_enabled():
+            self._cancel_hover_popup_schedule()
+            self._hide_tooltip()
+            self._hide_chip_add_popup()
+            return
+        self._cancel_hover_popup_schedule()
         spot_total = sum(self.bets[spot_id])
         if spot_total <= 0:
             hover_spot = self._resolve_empty_hover_spot(spot_id, event)
@@ -4188,11 +4650,14 @@ class RouletteBoardApp:
             self.hover_popup_until_motion = True
             self.hover_popup_origin = (event.x_root, event.y_root)
             popup_text = self._format_hover_popup_text(spot_id, spot_total=spot_total)
-            self._show_chip_add_popup(
+            self._schedule_hover_popup(
                 spot_id,
-                popup_text=popup_text,
-                keep_tooltip=False,
-                duration_ms=None,
+                lambda sid=spot_id, text=popup_text: self._show_chip_add_popup(
+                    sid,
+                    popup_text=text,
+                    keep_tooltip=False,
+                    duration_ms=None,
+                ),
             )
             return
         self.hover_popup_until_motion = False
@@ -4204,6 +4669,11 @@ class RouletteBoardApp:
             self._hide_chip_add_popup()
 
     def _on_spot_motion(self, spot_id, event):
+        if not self._popup_enabled():
+            self._cancel_hover_popup_schedule()
+            self._hide_tooltip()
+            self._hide_chip_add_popup()
+            return
         if self.hover_popup_until_motion:
             if self.hover_popup_origin is not None:
                 dx = abs(event.x_root - self.hover_popup_origin[0])
@@ -4213,6 +4683,7 @@ class RouletteBoardApp:
                     return
             self.hover_popup_until_motion = False
             self.hover_popup_origin = None
+            self._cancel_hover_popup_schedule()
             self._hide_chip_add_popup()
         spot_total = sum(self.bets[spot_id])
         if spot_total <= 0:
@@ -4223,6 +4694,7 @@ class RouletteBoardApp:
 
         if spot_total > 0:
             self.marker_popup_spot_id = None
+            self._cancel_hover_popup_schedule()
             self._show_spot_tooltip(spot_id, event)
         else:
             if spot_id in self.marker_spot_ids:
@@ -4296,6 +4768,7 @@ class RouletteBoardApp:
                 self.chip_hover_fallback_spot_id = hover_chip_spot
                 return
         self.chip_hover_fallback_spot_id = None
+        self._cancel_hover_popup_schedule()
         self.hover_popup_until_motion = False
         self.hover_popup_origin = None
         self.marker_popup_spot_id = None
@@ -4335,6 +4808,9 @@ class RouletteBoardApp:
         self.canvas.tag_bind(stack_tag, "<Leave>", self._on_spot_leave)
 
     def _show_spot_tooltip(self, spot_id, event):
+        if not self._popup_enabled():
+            self._hide_tooltip()
+            return
         if spot_id not in self.spots:
             return
         spot_total = sum(self.bets[spot_id])
@@ -4342,11 +4818,14 @@ class RouletteBoardApp:
         header = f"{display_name} ({self.spots[spot_id]['payout']})"
 
         if spot_total > 0:
-            text = (
-                f"{header}\n"
-                f"Bet: ${spot_total:,}\n"
-                f"Click adds: +${self.selected_chip.get():,}"
-            )
+            if self._popup_mode() == "compact":
+                text = f"{header}\nBet: ${spot_total:,}"
+            else:
+                text = (
+                    f"{header}\n"
+                    f"Bet: ${spot_total:,}\n"
+                    f"Click adds: +${self.selected_chip.get():,}"
+                )
         else:
             text = header
         self.tooltip.configure(text=text)
@@ -4361,6 +4840,8 @@ class RouletteBoardApp:
         self.tooltip.place_forget()
 
     def _show_chip_add_popup(self, spot_id, chip_amount=None, popup_text=None, keep_tooltip=False, duration_ms=500):
+        if not self._popup_enabled():
+            return
         if spot_id not in self.spots:
             return
         if popup_text is None:
@@ -4381,7 +4862,7 @@ class RouletteBoardApp:
         if odds_match:
             label_text = odds_match.group(1)
             odds_text = odds_match.group(2)
-            label_fill = "#000000"
+            label_fill = self._popup_text_color()
             if str(spot_id).startswith("straight_"):
                 label_fill = self._straight_popup_label_color(spot_id)
             elif str(spot_id).startswith(("column_", "dozen_", "outside_")):
@@ -4422,7 +4903,7 @@ class RouletteBoardApp:
                     spot_x,
                     popup_y,
                     text=popup_text,
-                    fill="#000000",
+                    fill=self._popup_text_color(),
                     font=popup_font,
                     justify="center",
                     state="disabled",
@@ -4446,8 +4927,8 @@ class RouletteBoardApp:
                 bbox[1] - 3,
                 bbox[2] + 6,
                 bbox[3] + 3,
-                fill="#ffffff",
-                outline="#111111",
+                fill=self._popup_background_color(),
+                outline=self._popup_border_color(),
                 width=1,
                 state="disabled",
                 tags=("chip_add_popup",),
@@ -4463,6 +4944,7 @@ class RouletteBoardApp:
         self.canvas.delete("chip_add_popup")
 
     def _hide_chip_add_popup(self):
+        self._cancel_hover_popup_schedule()
         if self.chip_add_popup_after_id is not None:
             self.root.after_cancel(self.chip_add_popup_after_id)
             self.chip_add_popup_after_id = None

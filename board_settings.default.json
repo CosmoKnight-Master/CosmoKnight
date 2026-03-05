@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "theme": {
+    "board_felt_color": "#0f7a36",
+    "surround_color": "#ffffff"
+  },
+  "hover_popup": {
+    "enabled": true,
+    "mode": "detailed",
+    "delay_ms": 0,
+    "style": {
+      "background_color": "#111827",
+      "text_color": "#f9fafb",
+      "border_color": "#111111"
+    }
+  }
+}

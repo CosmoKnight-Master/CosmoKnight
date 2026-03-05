@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gamblingexcellence.local/schemas/board_settings.schema.json",
+  "title": "Roulette Board Settings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "theme",
+    "hover_popup"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "board_felt_color",
+        "surround_color"
+      ],
+      "properties": {
+        "board_felt_color": {
+          "$ref": "#/$defs/hexColor"
+        },
+        "surround_color": {
+          "$ref": "#/$defs/hexColor"
+        }
+      }
+    },
+    "hover_popup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "mode",
+        "delay_ms",
+        "style"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "compact",
+            "detailed"
+          ]
+        },
+        "delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3000
+        },
+        "style": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "background_color",
+            "text_color",
+            "border_color"
+          ],
+          "properties": {
+            "background_color": {
+              "$ref": "#/$defs/hexColor"
+            },
+            "text_color": {
+              "$ref": "#/$defs/hexColor"
+            },
+            "border_color": {
+              "$ref": "#/$defs/hexColor"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hexColor": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    }
+  }
+}
