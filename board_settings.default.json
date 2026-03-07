@@ -1,8 +1,8 @@
 {
   "version": 1,
   "theme": {
-    "board_felt_color": "#0f7a36",
-    "surround_color": "#ffffff"
+    "board_felt_color": "#166534",
+    "surround_color": "#4a2f1c"
   },
   "hover_popup": {
     "enabled": true,

@@ -1,11 +1,13 @@
+import hashlib
 import json
+import math
 import os
 import random
 import re
 import tkinter as tk
 from collections import defaultdict
 import tkinter.font as tkfont
-from tkinter import filedialog, messagebox, ttk
+from tkinter import colorchooser, filedialog, messagebox, ttk
 
 
 class RouletteBoardApp:
@@ -39,6 +41,7 @@ class RouletteBoardApp:
         500: ("#7c3aed", "#5b21b6", "#ffffff", "#ddd6fe"),
         1000: ("#f59e0b", "#b45309", "#111827", "#fde68a"),
     }
+    TEXTURES = ("flat", "felt", "ceramic", "wood grain", "glass", "marble", "velvet", "brushed metal")
     STRATEGY_MODES = ("standard", "recovery", "progression", "repeat")
     RULE_OPERATORS = (">=", ">", "<=", "<", "==", "!=")
     BASE_METRICS = (
@@ -127,10 +130,42 @@ class RouletteBoardApp:
         "Switch Stage",
     )
     STAGE_TRIGGER_ACTION_SCOPES = ("This Trigger", "Group")
-    SETTINGS_VERSION = 1
+    SETTINGS_VERSION = 2
     SETTINGS_FILE = "board_settings.json"
     SETTINGS_DEFAULT_FILE = "board_settings.default.json"
     SETTINGS_SCHEMA_FILE = "board_settings.schema.json"
+    STANDARD_COLOR_TOKEN = "standard"
+    OUTSIDE_PAIR_SHADE_AMOUNT = 0.18
+    STANDARD_THEME_COLORS = {
+        "board_felt_color": "#166534",
+        "surround_color": "#4a2f1c",
+        "dozens_color": "#ff00ff",
+        "columns_color": "#8000ff",
+        "outside_low_high_color": "#38bdf8",
+        "outside_even_odd_color": "#38bdf8",
+        "outside_red_black_color": "#38bdf8",
+        "zero_color": "#00ff00",
+        "numbers_font_color": "#f8f1de",
+        "zero_font_color": "#008080",
+        "columns_font_color": "#ffffff",
+        "dozens_font_color": "#ffffff",
+        "outside_low_high_font_color": "#ffffff",
+        "outside_even_odd_font_color": "#ffffff",
+        "outside_red_black_font_color": "#000000",
+    }
+
+    # Canvas and board layout constants
+    CANVAS_W = 1880
+    CANVAS_H = 860
+    _LAYOUT_BOARD_Y = 26
+    _LAYOUT_CELL_W = 112
+    _LAYOUT_CELL_H = 136
+    _LAYOUT_GRID_COLS = 12
+    _LAYOUT_VERTICAL_GAP = 18
+    _LAYOUT_OUTSIDE_BOX_GAP = 3
+    _LAYOUT_COLUMN_GAP = 14
+    _LAYOUT_BASE_COLUMN_W = 103  # 128 - 25
+    _LAYOUT_CHIP_RADIUS = 14
 
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -142,6 +177,24 @@ class RouletteBoardApp:
         self.settings_status_var = None
         self.settings_theme_board_var = None
         self.settings_theme_surround_var = None
+        self.settings_theme_dozens_var = None
+        self.settings_theme_columns_var = None
+        self.settings_theme_outside_low_high_var = None
+        self.settings_theme_outside_even_odd_var = None
+        self.settings_theme_outside_red_black_var = None
+        self.settings_theme_zero_var = None
+        self.settings_theme_board_texture_var = None
+        self.settings_theme_surround_texture_var = None
+        self.settings_theme_dozens_texture_var = None
+        self.settings_theme_columns_texture_var = None
+        self.settings_theme_zero_texture_var = None
+        self.settings_theme_numbers_font_var = None
+        self.settings_theme_zero_font_var = None
+        self.settings_theme_columns_font_var = None
+        self.settings_theme_dozens_font_var = None
+        self.settings_theme_outside_low_high_font_var = None
+        self.settings_theme_outside_even_odd_font_var = None
+        self.settings_theme_outside_red_black_font_var = None
         self.settings_popup_enabled_var = None
         self.settings_popup_mode_var = None
         self.settings_popup_delay_var = None
@@ -150,6 +203,7 @@ class RouletteBoardApp:
 
         self.selected_chip = tk.IntVar(value=1)
         self.spots = {}
+        self._spot_numbers_cache: dict = {}
         self.bets = defaultdict(list)
         self.stack_tags = {}
         self.legend_canvases = {}
@@ -272,6 +326,9 @@ class RouletteBoardApp:
         self.american_bet_option_combo = None
         self.european_bet_option_combo = None
         self.wheel_type_combo = None
+        self.wheel_controls_frame = None
+        self.wheel_controls_row = None
+        self.wheel_controls_label = None
         self.wheel_call_button_row = None
         self.call_bets_button = None
         self.call_bets_display_host = None
@@ -303,7 +360,6 @@ class RouletteBoardApp:
         self.loss_streak = 0
         self.bankroll = 0
         self.peak_bankroll = 0
-        self.en_prison_pending = set()
         self.call_bet_entries = []
         self.next_call_bet_id = 1
         self.bet_chip_sources = defaultdict(list)
@@ -317,8 +373,27 @@ class RouletteBoardApp:
         return {
             "version": self.SETTINGS_VERSION,
             "theme": {
-                "board_felt_color": "#0f7a36",
-                "surround_color": "#ffffff",
+                "board_felt_color": self.STANDARD_THEME_COLORS["board_felt_color"],
+                "surround_color": self.STANDARD_THEME_COLORS["surround_color"],
+                "dozens_color": self.STANDARD_THEME_COLORS["dozens_color"],
+                "columns_color": self.STANDARD_THEME_COLORS["columns_color"],
+                "outside_low_high_color": "#38bdf8",
+                "outside_even_odd_color": "#38bdf8",
+                "outside_red_black_color": "#38bdf8",
+                "zero_color": self.STANDARD_THEME_COLORS["zero_color"],
+                "board_felt_texture": "felt",
+                "surround_texture": "wood grain",
+                "dozens_texture": "flat",
+                "columns_texture": "flat",
+                "even_money_texture": "flat",
+                "zero_texture": "flat",
+                "numbers_font_color": self.STANDARD_THEME_COLORS["numbers_font_color"],
+                "zero_font_color": self.STANDARD_THEME_COLORS["zero_font_color"],
+                "columns_font_color": self.STANDARD_THEME_COLORS["columns_font_color"],
+                "dozens_font_color": self.STANDARD_THEME_COLORS["dozens_font_color"],
+                "outside_low_high_font_color": self.STANDARD_THEME_COLORS["outside_low_high_font_color"],
+                "outside_even_odd_font_color": self.STANDARD_THEME_COLORS["outside_even_odd_font_color"],
+                "outside_red_black_font_color": self.STANDARD_THEME_COLORS["outside_red_black_font_color"],
             },
             "hover_popup": {
                 "enabled": True,
@@ -363,6 +438,21 @@ class RouletteBoardApp:
         if not isinstance(payload, dict):
             return self._default_board_settings()
         version = self._safe_int(payload.get("version"), 0)
+        theme = payload.get("theme")
+        if not isinstance(theme, dict):
+            theme = {}
+            payload["theme"] = theme
+        if version < 2:
+            legacy_outside_color = theme.get("even_money_color")
+            legacy_outside_font_color = theme.get("even_money_font_color")
+            if legacy_outside_color is not None:
+                theme.setdefault("outside_low_high_color", legacy_outside_color)
+                theme.setdefault("outside_even_odd_color", legacy_outside_color)
+                theme.setdefault("outside_red_black_color", legacy_outside_color)
+            if legacy_outside_font_color is not None:
+                theme.setdefault("outside_low_high_font_color", legacy_outside_font_color)
+                theme.setdefault("outside_even_odd_font_color", legacy_outside_font_color)
+                theme.setdefault("outside_red_black_font_color", legacy_outside_font_color)
         if version <= 0:
             payload["version"] = self.SETTINGS_VERSION
             return payload
@@ -386,13 +476,71 @@ class RouletteBoardApp:
         normalized = {
             "version": self.SETTINGS_VERSION,
             "theme": {
-                "board_felt_color": self._normalize_hex_color(
+                "board_felt_color": self._normalize_color_choice(
                     theme.get("board_felt_color"),
                     defaults["theme"]["board_felt_color"],
                 ),
-                "surround_color": self._normalize_hex_color(
+                "surround_color": self._normalize_color_choice(
                     theme.get("surround_color"),
                     defaults["theme"]["surround_color"],
+                ),
+                "dozens_color": self._normalize_color_choice(
+                    theme.get("dozens_color"),
+                    defaults["theme"]["dozens_color"],
+                ),
+                "columns_color": self._normalize_color_choice(
+                    theme.get("columns_color"),
+                    defaults["theme"]["columns_color"],
+                ),
+                "outside_low_high_color": self._normalize_color_choice(
+                    theme.get("outside_low_high_color", theme.get("even_money_color")),
+                    defaults["theme"]["outside_low_high_color"],
+                ),
+                "outside_even_odd_color": self._normalize_color_choice(
+                    theme.get("outside_even_odd_color", theme.get("even_money_color")),
+                    defaults["theme"]["outside_even_odd_color"],
+                ),
+                "outside_red_black_color": self._normalize_color_choice(
+                    theme.get("outside_red_black_color", theme.get("even_money_color")),
+                    defaults["theme"]["outside_red_black_color"],
+                ),
+                "zero_color": self._normalize_color_choice(
+                    theme.get("zero_color"),
+                    defaults["theme"]["zero_color"],
+                ),
+                "board_felt_texture": self._normalize_texture(theme.get("board_felt_texture")),
+                "surround_texture": self._normalize_texture(theme.get("surround_texture")),
+                "dozens_texture": self._normalize_texture(theme.get("dozens_texture")),
+                "columns_texture": self._normalize_texture(theme.get("columns_texture")),
+                "even_money_texture": self._normalize_texture(theme.get("even_money_texture")),
+                "zero_texture": self._normalize_texture(theme.get("zero_texture")),
+                "numbers_font_color": self._normalize_color_choice(
+                    theme.get("numbers_font_color"),
+                    defaults["theme"]["numbers_font_color"],
+                ),
+                "zero_font_color": self._normalize_color_choice(
+                    theme.get("zero_font_color"),
+                    defaults["theme"]["zero_font_color"],
+                ),
+                "columns_font_color": self._normalize_color_choice(
+                    theme.get("columns_font_color"),
+                    defaults["theme"]["columns_font_color"],
+                ),
+                "dozens_font_color": self._normalize_color_choice(
+                    theme.get("dozens_font_color"),
+                    defaults["theme"]["dozens_font_color"],
+                ),
+                "outside_low_high_font_color": self._normalize_color_choice(
+                    theme.get("outside_low_high_font_color", theme.get("even_money_font_color")),
+                    defaults["theme"]["outside_low_high_font_color"],
+                ),
+                "outside_even_odd_font_color": self._normalize_color_choice(
+                    theme.get("outside_even_odd_font_color", theme.get("even_money_font_color")),
+                    defaults["theme"]["outside_even_odd_font_color"],
+                ),
+                "outside_red_black_font_color": self._normalize_color_choice(
+                    theme.get("outside_red_black_font_color", theme.get("even_money_font_color")),
+                    defaults["theme"]["outside_red_black_font_color"],
                 ),
             },
             "hover_popup": {
@@ -442,23 +590,93 @@ class RouletteBoardApp:
         return result
 
     @staticmethod
+    def _normalize_texture(value, fallback="flat"):
+        v = str(value).strip().lower() if value is not None else ""
+        return v if v in RouletteBoardApp.TEXTURES else fallback
+
+    @staticmethod
     def _normalize_hex_color(value, fallback):
         text = str(value).strip() if value is not None else ""
         if re.fullmatch(r"#[0-9A-Fa-f]{6}", text):
             return text.lower()
         return fallback
 
+    @classmethod
+    def _normalize_color_choice(cls, value, fallback):
+        text = str(value).strip().lower() if value is not None else ""
+        if text == cls.STANDARD_COLOR_TOKEN:
+            return cls.STANDARD_COLOR_TOKEN
+        if re.fullmatch(r"#[0-9A-Fa-f]{6}", text):
+            return text
+        fallback_text = str(fallback).strip().lower() if fallback is not None else ""
+        if fallback_text == cls.STANDARD_COLOR_TOKEN:
+            return cls.STANDARD_COLOR_TOKEN
+        if re.fullmatch(r"#[0-9A-Fa-f]{6}", fallback_text):
+            return fallback_text
+        return cls.STANDARD_COLOR_TOKEN
+
+    @classmethod
+    def _standard_theme_color(cls, key):
+        return cls.STANDARD_THEME_COLORS.get(key, "#ffffff")
+
+    def _theme_color_choice(self, key):
+        fallback = self._default_board_settings()["theme"].get(key, self._standard_theme_color(key))
+        value = self.board_settings.get("theme", {}).get(key, fallback)
+        return self._normalize_color_choice(value, fallback)
+
+    def _resolve_theme_color(self, key):
+        choice = self._theme_color_choice(key)
+        if choice == self.STANDARD_COLOR_TOKEN:
+            return self._standard_theme_color(key)
+        return choice
+
     def _sync_settings_controls_from_state(self):
         if self.settings_theme_board_var is not None:
-            self.settings_theme_board_var.set(self._board_felt_color())
+            self.settings_theme_board_var.set(self._theme_color_choice("board_felt_color"))
         if self.settings_theme_surround_var is not None:
-            self.settings_theme_surround_var.set(self._surround_color())
+            self.settings_theme_surround_var.set(self._theme_color_choice("surround_color"))
+        if self.settings_theme_dozens_var is not None:
+            self.settings_theme_dozens_var.set(self._theme_color_choice("dozens_color"))
+        if self.settings_theme_columns_var is not None:
+            self.settings_theme_columns_var.set(self._theme_color_choice("columns_color"))
+        if self.settings_theme_outside_low_high_var is not None:
+            self.settings_theme_outside_low_high_var.set(self._theme_color_choice("outside_low_high_color"))
+        if self.settings_theme_outside_even_odd_var is not None:
+            self.settings_theme_outside_even_odd_var.set(self._theme_color_choice("outside_even_odd_color"))
+        if self.settings_theme_outside_red_black_var is not None:
+            self.settings_theme_outside_red_black_var.set(self._theme_color_choice("outside_red_black_color"))
+        if self.settings_theme_zero_var is not None:
+            self.settings_theme_zero_var.set(self._theme_color_choice("zero_color"))
+        if self.settings_theme_board_texture_var is not None:
+            self.settings_theme_board_texture_var.set(self._board_felt_texture())
+        if self.settings_theme_surround_texture_var is not None:
+            self.settings_theme_surround_texture_var.set(self._surround_texture())
+        if self.settings_theme_dozens_texture_var is not None:
+            self.settings_theme_dozens_texture_var.set("flat")
+        if self.settings_theme_columns_texture_var is not None:
+            self.settings_theme_columns_texture_var.set("flat")
+        if self.settings_theme_zero_texture_var is not None:
+            self.settings_theme_zero_texture_var.set("flat")
+        if self.settings_theme_numbers_font_var is not None:
+            self.settings_theme_numbers_font_var.set(self._theme_color_choice("numbers_font_color"))
+        if self.settings_theme_zero_font_var is not None:
+            self.settings_theme_zero_font_var.set(self._theme_color_choice("zero_font_color"))
+        if self.settings_theme_columns_font_var is not None:
+            self.settings_theme_columns_font_var.set(self._theme_color_choice("columns_font_color"))
+        if self.settings_theme_dozens_font_var is not None:
+            self.settings_theme_dozens_font_var.set(self._theme_color_choice("dozens_font_color"))
+        if self.settings_theme_outside_low_high_font_var is not None:
+            self.settings_theme_outside_low_high_font_var.set(self._theme_color_choice("outside_low_high_font_color"))
+        if self.settings_theme_outside_even_odd_font_var is not None:
+            self.settings_theme_outside_even_odd_font_var.set(self._theme_color_choice("outside_even_odd_font_color"))
+        if self.settings_theme_outside_red_black_font_var is not None:
+            self.settings_theme_outside_red_black_font_var.set(self._theme_color_choice("outside_red_black_font_color"))
         if self.settings_popup_enabled_var is not None:
-            self.settings_popup_enabled_var.set(self._popup_enabled())
+            self.settings_popup_enabled_var.set(self._popup_enabled(use_controls=False))
         if self.settings_popup_mode_var is not None:
-            self.settings_popup_mode_var.set(self._popup_mode())
+            self.settings_popup_mode_var.set(self._popup_mode(use_controls=False))
         if self.settings_popup_delay_var is not None:
-            self.settings_popup_delay_var.set(str(self._popup_delay_ms()))
+            self.settings_popup_delay_var.set(str(self._popup_delay_ms(use_controls=False)))
 
     def _apply_settings_from_controls(self):
         if self.settings_theme_board_var is None:
@@ -471,6 +689,25 @@ class RouletteBoardApp:
                 "theme": {
                     "board_felt_color": self.settings_theme_board_var.get().strip(),
                     "surround_color": self.settings_theme_surround_var.get().strip(),
+                    "dozens_color": self.settings_theme_dozens_var.get().strip(),
+                    "columns_color": self.settings_theme_columns_var.get().strip(),
+                    "outside_low_high_color": self.settings_theme_outside_low_high_var.get().strip(),
+                    "outside_even_odd_color": self.settings_theme_outside_even_odd_var.get().strip(),
+                    "outside_red_black_color": self.settings_theme_outside_red_black_var.get().strip(),
+                    "zero_color": self.settings_theme_zero_var.get().strip(),
+                    "board_felt_texture": self.settings_theme_board_texture_var.get(),
+                    "surround_texture": self.settings_theme_surround_texture_var.get(),
+                    "dozens_texture": "flat",
+                    "columns_texture": "flat",
+                    "even_money_texture": "flat",
+                    "zero_texture": "flat",
+                    "numbers_font_color": self.settings_theme_numbers_font_var.get().strip(),
+                    "zero_font_color": self.settings_theme_zero_font_var.get().strip(),
+                    "columns_font_color": self.settings_theme_columns_font_var.get().strip(),
+                    "dozens_font_color": self.settings_theme_dozens_font_var.get().strip(),
+                    "outside_low_high_font_color": self.settings_theme_outside_low_high_font_var.get().strip(),
+                    "outside_even_odd_font_color": self.settings_theme_outside_even_odd_font_var.get().strip(),
+                    "outside_red_black_font_color": self.settings_theme_outside_red_black_font_var.get().strip(),
                 },
                 "hover_popup": {
                     "enabled": bool(self.settings_popup_enabled_var.get()),
@@ -482,10 +719,397 @@ class RouletteBoardApp:
         self.board_settings = self._normalize_board_settings(next_payload)
         self._sync_settings_controls_from_state()
         self._apply_board_settings_runtime(rebuild_board=True)
-        if self.settings_status_var is not None:
-            self.settings_status_var.set(
-                f"Applied settings in memory. Click Save to persist to {self.board_settings_path}"
+        self._autosave_board_settings()
+
+    @staticmethod
+    def _lighten_color(hex_color, amount):
+        r = min(255, int(int(hex_color[1:3], 16) + (255 - int(hex_color[1:3], 16)) * amount))
+        g = min(255, int(int(hex_color[3:5], 16) + (255 - int(hex_color[3:5], 16)) * amount))
+        b = min(255, int(int(hex_color[5:7], 16) + (255 - int(hex_color[5:7], 16)) * amount))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    @staticmethod
+    def _darken_color(hex_color, amount):
+        r = max(0, int(int(hex_color[1:3], 16) * (1 - amount)))
+        g = max(0, int(int(hex_color[3:5], 16) * (1 - amount)))
+        b = max(0, int(int(hex_color[5:7], 16) * (1 - amount)))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    @staticmethod
+    def _blend_hex_colors(hex_a, hex_b, amount):
+        amount = max(0.0, min(1.0, float(amount)))
+        r = int((int(hex_a[1:3], 16) * (1.0 - amount)) + (int(hex_b[1:3], 16) * amount))
+        g = int((int(hex_a[3:5], 16) * (1.0 - amount)) + (int(hex_b[3:5], 16) * amount))
+        b = int((int(hex_a[5:7], 16) * (1.0 - amount)) + (int(hex_b[5:7], 16) * amount))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    @staticmethod
+    def _clamp_byte(value):
+        return max(0, min(255, int(value)))
+
+    @staticmethod
+    def _smoothstep(edge0, edge1, value):
+        if edge0 == edge1:
+            return 0.0
+        t = max(0.0, min(1.0, (value - edge0) / (edge1 - edge0)))
+        return t * t * (3.0 - 2.0 * t)
+
+    @staticmethod
+    def _stable_texture_seed(base_color, texture):
+        digest = hashlib.sha256(f"{base_color}:{texture}".encode("ascii")).digest()
+        return int.from_bytes(digest[:8], "big")
+
+    def _get_texture_image(self, fill, texture, width, height, origin_x=0, origin_y=0, surface_w=None, surface_h=None):
+        if not hasattr(self, "_texture_img_cache"):
+            self._texture_img_cache = {}
+        origin_x = int(origin_x)
+        origin_y = int(origin_y)
+        surface_w = int(surface_w) if surface_w is not None else int(width)
+        surface_h = int(surface_h) if surface_h is not None else int(height)
+        key = (fill, texture, width, height, origin_x, origin_y, surface_w, surface_h)
+        if key not in self._texture_img_cache:
+            self._texture_img_cache[key] = self._generate_texture_image(
+                fill,
+                texture,
+                width,
+                height,
+                origin_x=origin_x,
+                origin_y=origin_y,
+                surface_w=surface_w,
+                surface_h=surface_h,
             )
+        return self._texture_img_cache[key]
+
+    def _draw_textured_rect(
+        self,
+        x1,
+        y1,
+        x2,
+        y2,
+        fill,
+        texture,
+        outline="#d4af37",
+        outline_width=2,
+        tags=(),
+        origin_x=0,
+        origin_y=0,
+        surface_w=None,
+        surface_h=None,
+    ):
+        """Draw a rectangle with a realistic pixel-based texture via PhotoImage."""
+        self.canvas.create_rectangle(x1, y1, x2, y2, fill=fill, outline=outline, width=outline_width, tags=tags)
+        if texture == "flat":
+            return
+        ow = outline_width
+        ix1, iy1 = int(x1 + ow), int(y1 + ow)
+        ix2, iy2 = int(x2 - ow), int(y2 - ow)
+        w, h = ix2 - ix1, iy2 - iy1
+        if w <= 0 or h <= 0:
+            return
+        if "board_bg" in tags:
+            img = self._get_texture_image(
+                fill,
+                texture,
+                w,
+                h,
+                origin_x=origin_x,
+                origin_y=origin_y,
+                surface_w=surface_w,
+                surface_h=surface_h,
+            )
+            self.canvas.create_image(ix1, iy1, image=img, anchor="nw", tags=tags)
+            return
+        tile_limit = 384 if "board_bg" in tags else 256
+        tile_w = min(w, tile_limit)
+        tile_h = min(h, tile_limit)
+        y_pos = iy1
+        while y_pos < iy2:
+            current_h = min(tile_h, iy2 - y_pos)
+            x_pos = ix1
+            while x_pos < ix2:
+                current_w = min(tile_w, ix2 - x_pos)
+                img = self._get_texture_image(
+                    fill,
+                    texture,
+                    current_w,
+                    current_h,
+                    origin_x=origin_x + (x_pos - ix1),
+                    origin_y=origin_y + (y_pos - iy1),
+                    surface_w=surface_w,
+                    surface_h=surface_h,
+                )
+                self.canvas.create_image(x_pos, y_pos, image=img, anchor="nw", tags=tags)
+                x_pos += current_w
+            y_pos += current_h
+
+    def _generate_texture_image(self, base_color, texture, w, h, origin_x=0, origin_y=0, surface_w=None, surface_h=None):
+        """Generate a PhotoImage with a realistic pixel-level texture."""
+        r0 = int(base_color[1:3], 16)
+        g0 = int(base_color[3:5], 16)
+        b0 = int(base_color[5:7], 16)
+        origin_x = int(origin_x)
+        origin_y = int(origin_y)
+        surface_w = max(1, int(surface_w) if surface_w is not None else int(w))
+        surface_h = max(1, int(surface_h) if surface_h is not None else int(h))
+        seed = self._stable_texture_seed(base_color, texture)
+        rng = random.Random(seed)
+        clamp = self._clamp_byte
+        smoothstep = self._smoothstep
+        phase_a = rng.uniform(0.0, math.tau)
+        phase_b = rng.uniform(0.0, math.tau)
+        phase_c = rng.uniform(0.0, math.tau)
+        phase_d = rng.uniform(0.0, math.tau)
+        phase_e = rng.uniform(0.0, math.tau)
+        phase_f = rng.uniform(0.0, math.tau)
+        rows = []
+        for y in range(h):
+            row = []
+            py = origin_y + y
+            t_y = py / max(surface_h - 1, 1)
+            for x in range(w):
+                px = origin_x + x
+                t_x = px / max(surface_w - 1, 1)
+                r = float(r0)
+                g = float(g0)
+                b = float(b0)
+
+                if texture == "felt":
+                    # Roulette felt should read as dense, short nap with a directional groom,
+                    # not a visible woven cloth. Keep the contrast tight and the grain fine.
+                    grooming_band = math.sin((px * 0.016) + (py * 0.006) + phase_a) * 0.022
+                    under_nap = math.sin((px * 0.082) + math.sin(py * 0.024 + phase_b) * 1.8 + phase_c) * 0.018
+                    color_mottle = (
+                        math.sin(px * 0.11 + phase_d) * 0.012
+                        + math.sin(py * 0.10 + phase_e) * 0.010
+                        + math.sin((px + py) * 0.041 + phase_f) * 0.012
+                    )
+                    fiber_flash = max(
+                        0.0,
+                        math.sin((px * 2.28) - (py * 1.18) + phase_b)
+                        * math.sin((px * 1.74) + (py * 1.46) + phase_e),
+                    ) * 0.045
+                    stipple = math.sin(px * 1.34 + phase_a) * math.sin(py * 1.19 + phase_d) * 0.014
+                    edge_rolloff = smoothstep(0.84, 1.0, abs(t_y - 0.5) * 2.0) * 0.05
+                    factor = 0.965 + grooming_band + under_nap + color_mottle + fiber_flash + stipple - edge_rolloff
+                    r *= factor * 0.985
+                    g *= factor * 1.008
+                    b *= factor * 0.985
+
+                elif texture == "ceramic":
+                    crown_light = max(0.0, 1.0 - abs(t_y - 0.15) / 0.18) * 0.16
+                    shoulder_shadow = smoothstep(0.58, 1.0, t_y) * 0.11
+                    edge_falloff = smoothstep(0.72, 1.0, abs(t_x - 0.5) * 2.0) * 0.08
+                    dx = (t_x - 0.32) / 0.28
+                    dy = (t_y - 0.12) / 0.16
+                    spec = max(0.0, 1.0 - (dx * dx + dy * dy)) ** 2.8 * 0.50
+                    ribbon = max(0.0, 1.0 - abs(t_y - 0.28) / 0.05) * 0.08
+                    glaze_wave = math.sin(px * 0.055 + math.sin(py * 0.018 + phase_a) * 1.6 + phase_b) * 0.010
+                    orange_peel = math.sin(px * 0.44 + phase_c) * math.sin(py * 0.39 + phase_d) * 0.010
+                    speckle = max(
+                        0.0,
+                        math.sin(px * 2.20 + phase_e) * math.sin(py * 2.45 + phase_f) - 0.82,
+                    ) * 0.020
+                    base_factor = 0.985 + crown_light + ribbon + glaze_wave + orange_peel - shoulder_shadow - edge_falloff - speckle
+                    r = (r * base_factor) + ((255.0 - r) * spec)
+                    g = (g * (base_factor + 0.004)) + ((255.0 - g) * spec)
+                    b = (b * (base_factor + 0.007)) + ((255.0 - b) * spec)
+
+                elif texture == "wood grain":
+                    # Push this toward finished oak: broad cathedral figure, open pores,
+                    # and restrained medullary ray fleck under a warm satin sheen.
+                    sway = (
+                        math.sin(py * 0.024 + phase_a) * 11.0
+                        + math.sin(py * 0.071 + phase_b) * 4.2
+                        + math.sin(px * 0.004 + phase_c) * 1.6
+                    )
+                    growth = math.sin((px + sway) * 0.11 + phase_d) * 0.060
+                    latewood = max(0.0, math.sin((px + sway * 1.7) * 0.24 + phase_e)) * 0.050
+                    fine_grain = math.sin((px + sway * 1.3) * 0.52 + phase_f) * 0.016
+                    cathedral_curve = math.sin((px + math.sin(py * 0.040 + phase_a) * 18.0) * 0.018 + phase_c)
+                    cathedral = max(0.0, cathedral_curve) * max(0.0, math.sin(py * 0.020 + phase_b)) * 0.11
+                    pores = max(
+                        0.0,
+                        math.sin((px * 0.88) + (py * 0.07) + phase_d)
+                        * math.sin(py * 2.35 + phase_e)
+                        - 0.68,
+                    ) * 0.10
+                    ray_fleck = max(
+                        0.0,
+                        math.sin(py * 1.55 + phase_b)
+                        * math.sin((px + sway) * 0.060 + phase_f)
+                        - 0.78,
+                    ) * 0.06
+                    finish = max(0.0, 1.0 - abs(t_y - 0.18) / 0.15) * 0.07
+                    factor = 0.90 + growth + latewood + fine_grain + cathedral + finish + ray_fleck - pores
+                    highlight = finish * 0.18 + ray_fleck * 0.14
+                    r = (r * factor * 1.10) + ((234.0 - r) * highlight)
+                    g = (g * factor * 0.99) + ((208.0 - g) * highlight * 0.70)
+                    b = (b * factor * 0.84) + ((176.0 - b) * highlight * 0.45)
+
+                elif texture == "glass":
+                    cap_highlight = smoothstep(0.0, 0.10, 0.10 - t_y) * 0.28
+                    internal_wash = max(0.0, 1.0 - abs(t_y - 0.22) / 0.24) * 0.15
+                    lower_shadow = smoothstep(0.72, 1.0, t_y) * 0.16
+                    edge_tint = smoothstep(0.80, 1.0, max(abs(t_x - 0.5) * 2.0, abs(t_y - 0.5) * 2.0)) * 0.10
+                    dx = (t_x - 0.31) / 0.28
+                    dy = (t_y - 0.12) / 0.14
+                    spec = max(0.0, 1.0 - (dx * dx + dy * dy)) ** 3.0 * 0.52
+                    ribbon = max(0.0, 1.0 - abs(t_y - 0.30) / 0.045) * 0.09
+                    shimmer = math.sin((px * 0.060) + math.sin(py * 0.017 + phase_a) * 1.9 + phase_f) * 0.012
+                    caustic = math.sin((px * 0.17) - (py * 0.05) + phase_b) * 0.010
+                    base_factor = 0.97 + cap_highlight + internal_wash + ribbon + shimmer + caustic - lower_shadow - edge_tint
+                    r = (r * base_factor) + ((248.0 - r) * spec)
+                    g = (g * (base_factor + 0.01)) + ((252.0 - g) * spec)
+                    b = (b * (base_factor + 0.025)) + ((255.0 - b) * spec)
+
+                elif texture == "marble":
+                    # Marble needs soft mineral body variation with warped, irregular veining.
+                    # The base stays smooth while the veins brighten and feather organically.
+                    flow_x = (
+                        (px * 0.020)
+                        + math.sin(py * 0.024 + phase_a) * 4.2
+                        + math.sin(py * 0.071 + phase_b) * 1.1
+                    )
+                    flow_y = (
+                        (py * 0.017)
+                        + math.sin(px * 0.019 + phase_c) * 3.7
+                        + math.sin(px * 0.061 + phase_d) * 0.9
+                    )
+                    body_cloud = (
+                        math.sin(flow_x * 0.62 + phase_e) * 0.06
+                        + math.sin((flow_x + flow_y) * 0.34 + phase_f) * 0.05
+                        + math.sin((px * 0.011) - (py * 0.013) + phase_b) * 0.04
+                    )
+                    mineral = math.sin((px * 0.058) + (py * 0.041) + phase_c) * 0.018
+                    primary = abs(math.sin(flow_x + flow_y * 0.21 + phase_a))
+                    secondary = abs(math.sin(flow_x * 1.78 - flow_y * 0.43 + phase_d))
+                    vein = max(0.0, 1.0 - primary * 9.5) ** 2.8 * 0.48
+                    vein += max(0.0, 1.0 - secondary * 12.0) ** 3.4 * 0.22
+                    feather = max(0.0, 1.0 - primary * 4.8) ** 2.0 * 0.10
+                    polish = max(
+                        0.0,
+                        1.0 - (((t_x - 0.28) / 0.42) ** 2 + ((t_y - 0.14) / 0.24) ** 2),
+                    ) ** 2.5 * 0.18
+                    base_factor = 0.95 + body_cloud + mineral + polish - feather
+                    r = (r * base_factor) + ((248.0 - r) * vein) + ((220.0 - r) * feather * 0.25)
+                    g = (g * (base_factor + 0.01)) + ((250.0 - g) * vein) + ((225.0 - g) * feather * 0.25)
+                    b = (b * (base_factor + 0.015)) + ((252.0 - b) * vein) + ((232.0 - b) * feather * 0.30)
+
+                elif texture == "velvet":
+                    sweep = math.sin((px * 0.020) + (py * 0.034) + phase_a) * 0.085
+                    nap = math.sin((px * 0.24) - (py * 0.10) + phase_b) * 0.020
+                    crushed = max(0.0, math.sin((px * 0.041) + (py * 0.016) + phase_c)) * 0.055
+                    plush = math.sin((px * 0.96) - (py * 0.26) + phase_d) * 0.014
+                    vignette = 1.0 - smoothstep(0.68, 1.0, max(abs(t_x - 0.5) * 2.0, abs(t_y - 0.5) * 2.0)) * 0.16
+                    sheen = max(0.0, math.sin((px * 0.028) - (py * 0.020) + phase_e)) ** 2 * 0.18
+                    factor = (0.90 + sweep + nap + crushed + plush) * vignette
+                    r = (r * factor) + ((245.0 - r) * sheen * 0.12)
+                    g = (g * (factor * 0.985)) + ((240.0 - g) * sheen * 0.08)
+                    b = (b * (factor * 1.02)) + ((255.0 - b) * sheen * 0.16)
+
+                elif texture == "brushed metal":
+                    brush = (
+                        math.sin(py * 2.3 + phase_a) * 0.028
+                        + math.sin(py * 7.1 + phase_b) * 0.018
+                        + math.sin(py * 18.0 + phase_c) * 0.008
+                    )
+                    scuff = max(
+                        0.0,
+                        math.sin(py * 31.0 + phase_d) * math.sin(px * 0.045 + phase_e) - 0.74,
+                    ) * 0.05
+                    burnish = max(0.0, 1.0 - abs(t_y - 0.33) / 0.11) * 0.22
+                    secondary_reflection = max(0.0, 1.0 - abs(t_y - 0.73) / 0.18) * 0.06
+                    edge_shadow = smoothstep(0.78, 1.0, abs(t_x - 0.5) * 2.0) * 0.08
+                    factor = 0.95 + brush + burnish + secondary_reflection - scuff - edge_shadow
+                    r = (r * factor) + ((236.0 - r) * burnish * 0.22)
+                    g = (g * (factor + 0.01)) + ((240.0 - g) * burnish * 0.24)
+                    b = (b * (factor + 0.03)) + ((248.0 - b) * burnish * 0.28)
+
+                row.append(f"#{clamp(r):02x}{clamp(g):02x}{clamp(b):02x}")
+            rows.append(row)
+        img = tk.PhotoImage(width=w, height=h)
+        for y, row in enumerate(rows):
+            img.put("{" + " ".join(row) + "}", to=(0, y))
+        return img
+
+    def _make_texture_selector(self, parent, var):
+        """Create a texture combobox that applies to the board immediately on selection."""
+        cb = ttk.Combobox(parent, textvariable=var, values=self.TEXTURES, width=14, state="readonly")
+        cb.bind("<<ComboboxSelected>>", lambda _: self._apply_settings_from_controls())
+        return cb
+
+    def _make_color_button(self, parent, var, standard_preview="#e5e7eb", dialog_title="Choose color"):
+        """Create a color button with Custom and Standard choices."""
+        def _contrast(hex_color):
+            r = int(hex_color[1:3], 16)
+            g = int(hex_color[3:5], 16)
+            b = int(hex_color[5:7], 16)
+            return "#000000" if (0.299 * r + 0.587 * g + 0.114 * b) > 128 else "#ffffff"
+
+        btn = tk.Button(parent, width=9, relief="solid", bd=2, font=("Segoe UI", 9, "bold"))
+
+        def _pick_custom():
+            current = var.get().strip().lower()
+            initial = current if re.fullmatch(r"#[0-9A-Fa-f]{6}", current) else standard_preview
+            result = colorchooser.askcolor(color=initial, title=dialog_title)
+            if result and result[1]:
+                var.set(result[1].lower())
+                self._apply_settings_from_controls()
+
+        def _use_standard():
+            var.set(self.STANDARD_COLOR_TOKEN)
+            self._apply_settings_from_controls()
+
+        def _pick():
+            menu = tk.Menu(btn, tearoff=0)
+            menu.add_command(label="Custom...", command=_pick_custom)
+            menu.add_command(label="Standard", command=_use_standard)
+            try:
+                menu.tk_popup(btn.winfo_rootx(), btn.winfo_rooty() + btn.winfo_height())
+            finally:
+                menu.grab_release()
+
+        btn.configure(command=_pick)
+
+        def _update_btn(*_):
+            color = var.get().strip().lower()
+            if color == self.STANDARD_COLOR_TOKEN:
+                fg = _contrast(standard_preview)
+                btn.configure(
+                    bg=standard_preview,
+                    fg=fg,
+                    text="Standard",
+                    activebackground=standard_preview,
+                    activeforeground=fg,
+                )
+                return
+            if re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
+                fg = _contrast(color)
+                btn.configure(bg=color, fg=fg, text=color, activebackground=color, activeforeground=fg)
+                return
+            fg = _contrast(standard_preview)
+            btn.configure(
+                bg=standard_preview,
+                fg=fg,
+                text="Standard",
+                activebackground=standard_preview,
+                activeforeground=fg,
+            )
+
+        var.trace_add("write", _update_btn)
+        _update_btn()
+        return btn
+
+    def _autosave_board_settings(self):
+        """Silently write current settings to disk; update status bar on success/failure."""
+        try:
+            with open(self.board_settings_path, "w", encoding="utf-8") as f:
+                json.dump(self.board_settings, f, indent=2)
+            if self.settings_status_var is not None:
+                self.settings_status_var.set(f"Settings saved to {self.board_settings_path}")
+        except OSError as exc:
+            if self.settings_status_var is not None:
+                self.settings_status_var.set(f"Auto-save failed: {exc}")
 
     def _save_board_settings_to_disk(self):
         self._apply_settings_from_controls()
@@ -503,6 +1127,27 @@ class RouletteBoardApp:
         self.root.configure(bg=surround_color)
         if hasattr(self, "screen_host") and self.screen_host is not None:
             self.screen_host.configure(bg=surround_color)
+        if hasattr(self, "screens") and isinstance(self.screens, dict) and "board" in self.screens:
+            self.screens["board"].configure(bg=surround_color)
+        if hasattr(self, "board_content") and self.board_content is not None:
+            self.board_content.configure(bg=surround_color)
+        if hasattr(self, "board_top_panel") and self.board_top_panel is not None:
+            self.board_top_panel.configure(bg=surround_color)
+        if hasattr(self, "nav_frame") and self.nav_frame is not None:
+            self.nav_frame.configure(bg=surround_color)
+        if hasattr(self, "chart_host") and self.chart_host is not None:
+            self.chart_host.configure(bg=surround_color)
+        if hasattr(self, "chart_wrap") and self.chart_wrap is not None:
+            self.chart_wrap.configure(bg=surround_color)
+        if hasattr(self, "board_left_controls") and self.board_left_controls is not None:
+            self.board_left_controls.configure(bg=surround_color)
+        self._apply_wheel_controls_theme()
+        self._apply_call_bets_theme()
+        if hasattr(self, "bet_controls_frame") and self.bet_controls_frame is not None:
+            self.bet_controls_frame.configure(bg=surround_color)
+        if hasattr(self, "legend_canvases") and isinstance(self.legend_canvases, dict):
+            for chip_canvas in self.legend_canvases.values():
+                chip_canvas.configure(bg=surround_color)
         if hasattr(self, "canvas") and self.canvas is not None:
             self.canvas.configure(bg=surround_color)
         if hasattr(self, "tooltip") and self.tooltip is not None:
@@ -511,29 +1156,152 @@ class RouletteBoardApp:
                 fg=self._popup_text_color(),
                 highlightbackground=self._popup_border_color(),
             )
+        if not self._popup_enabled(use_controls=False):
+            self._dismiss_hover_feedback()
         if rebuild_board and hasattr(self, "canvas") and self.canvas is not None:
             self._rebuild_board_for_wheel()
+        if hasattr(self, "nav_frame") and self.nav_frame is not None:
+            self._schedule_navigation_layout()
+        if hasattr(self, "board_top_panel") and self.board_top_panel is not None:
+            self._schedule_board_top_panel_layout()
         self._sync_settings_controls_from_state()
 
     def _board_felt_color(self):
-        return self.board_settings.get("theme", {}).get("board_felt_color", "#0f7a36")
+        return self._resolve_theme_color("board_felt_color")
+
+    def _dozens_color(self):
+        return self._resolve_theme_color("dozens_color")
+
+    def _columns_color(self):
+        return self._resolve_theme_color("columns_color")
+
+    def _outside_low_high_color(self):
+        return self._resolve_theme_color("outside_low_high_color")
+
+    def _outside_even_odd_color(self):
+        return self._resolve_theme_color("outside_even_odd_color")
+
+    def _outside_red_black_color(self):
+        return self._resolve_theme_color("outside_red_black_color")
+
+    def _zero_color(self):
+        return self._resolve_theme_color("zero_color")
+
+    def _board_felt_texture(self):
+        return self.board_settings.get("theme", {}).get("board_felt_texture", "flat")
+
+    def _surround_texture(self):
+        return self.board_settings.get("theme", {}).get("surround_texture", "flat")
+
+    def _dozens_texture(self):
+        return self.board_settings.get("theme", {}).get("dozens_texture", "flat")
+
+    def _columns_texture(self):
+        return self.board_settings.get("theme", {}).get("columns_texture", "flat")
+
+    def _zero_texture(self):
+        return self.board_settings.get("theme", {}).get("zero_texture", "flat")
+
+    def _numbers_font_color(self):
+        return self._resolve_theme_color("numbers_font_color")
+
+    def _zero_font_color(self):
+        return self._resolve_theme_color("zero_font_color")
+
+    def _columns_font_color(self):
+        return self._resolve_theme_color("columns_font_color")
+
+    def _dozens_font_color(self):
+        return self._resolve_theme_color("dozens_font_color")
+
+    def _outside_low_high_font_color(self):
+        return self._resolve_theme_color("outside_low_high_font_color")
+
+    def _outside_even_odd_font_color(self):
+        return self._resolve_theme_color("outside_even_odd_font_color")
+
+    def _outside_red_black_font_color(self):
+        return self._resolve_theme_color("outside_red_black_font_color")
 
     def _surround_color(self):
-        return self.board_settings.get("theme", {}).get("surround_color", "#ffffff")
+        return self._resolve_theme_color("surround_color")
 
-    def _popup_enabled(self):
-        return bool(self.board_settings.get("hover_popup", {}).get("enabled", True))
+    def _outside_pair_box_colors(self, key, companion_mode="lighter", standard_pair=None):
+        choice = self._theme_color_choice(key)
+        base_color = self._resolve_theme_color(key)
+        if choice == self.STANDARD_COLOR_TOKEN and standard_pair is not None:
+            return standard_pair
+        if companion_mode == "darker":
+            return base_color, self._darken_color(base_color, self.OUTSIDE_PAIR_SHADE_AMOUNT)
+        return base_color, self._lighten_color(base_color, self.OUTSIDE_PAIR_SHADE_AMOUNT)
 
-    def _popup_mode(self):
-        mode = str(self.board_settings.get("hover_popup", {}).get("mode", "detailed")).strip().lower()
+    def _current_hover_popup_settings(self, use_controls=True):
+        hover_popup = self.board_settings.get("hover_popup", {})
+        if not isinstance(hover_popup, dict):
+            hover_popup = {}
+        if (
+            not use_controls
+            or (
+                self.settings_popup_enabled_var is None
+                and self.settings_popup_mode_var is None
+                and self.settings_popup_delay_var is None
+            )
+        ):
+            return hover_popup
+
+        live_popup = dict(hover_popup)
+        if self.settings_popup_enabled_var is not None:
+            live_popup["enabled"] = bool(self.settings_popup_enabled_var.get())
+        if self.settings_popup_mode_var is not None:
+            live_popup["mode"] = self.settings_popup_mode_var.get()
+        if self.settings_popup_delay_var is not None:
+            live_popup["delay_ms"] = self._safe_int(
+                self.settings_popup_delay_var.get(),
+                hover_popup.get("delay_ms", 0),
+            )
+        return live_popup
+
+    def _popup_enabled(self, use_controls=True):
+        return bool(self._current_hover_popup_settings(use_controls=use_controls).get("enabled", True))
+
+    def _popup_mode(self, use_controls=True):
+        mode = str(self._current_hover_popup_settings(use_controls=use_controls).get("mode", "detailed")).strip().lower()
         return mode if mode in {"compact", "detailed"} else "detailed"
 
-    def _popup_delay_ms(self):
-        delay = self._safe_int(self.board_settings.get("hover_popup", {}).get("delay_ms", 0), 0)
+    def _popup_delay_ms(self, use_controls=True):
+        delay = self._safe_int(self._current_hover_popup_settings(use_controls=use_controls).get("delay_ms", 0), 0)
         return max(0, min(3000, delay))
+
+    def _dismiss_hover_feedback(self):
+        self.hover_popup_until_motion = False
+        self.hover_popup_origin = None
+        self.chip_hover_fallback_spot_id = None
+        self.marker_popup_spot_id = None
+        self._hide_tooltip()
+        if hasattr(self, "canvas") and self.canvas is not None:
+            self._hide_chip_add_popup()
+        else:
+            self._cancel_hover_popup_schedule()
 
     def _popup_background_color(self):
         return self.board_settings.get("hover_popup", {}).get("style", {}).get("background_color", "#111827")
+
+    def _on_popup_enabled_toggle(self):
+        enabled = True
+        if self.settings_popup_enabled_var is not None:
+            enabled = bool(self.settings_popup_enabled_var.get())
+        self.board_settings = self._normalize_board_settings(
+            self._deep_merge_dict(
+                self.board_settings,
+                {
+                    "version": self.SETTINGS_VERSION,
+                    "hover_popup": {"enabled": enabled},
+                },
+            )
+        )
+        self._autosave_board_settings()
+        if not enabled:
+            self._dismiss_hover_feedback()
 
     def _popup_text_color(self):
         return self.board_settings.get("hover_popup", {}).get("style", {}).get("text_color", "#f9fafb")
@@ -541,10 +1309,251 @@ class RouletteBoardApp:
     def _popup_border_color(self):
         return self.board_settings.get("hover_popup", {}).get("style", {}).get("border_color", "#111111")
 
+    @staticmethod
+    def _contrast_text_color(hex_color, dark="#111827", light="#f8fafc"):
+        text = str(hex_color).strip() if hex_color is not None else ""
+        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", text):
+            return dark
+        r = int(text[1:3], 16)
+        g = int(text[3:5], 16)
+        b = int(text[5:7], 16)
+        luminance = (0.299 * r) + (0.587 * g) + (0.114 * b)
+        return dark if luminance > 150 else light
+
+    def _surround_hint_color(self):
+        surround = self._surround_color()
+        contrast = self._contrast_text_color(surround)
+        if contrast == "#111827":
+            accent = self._blend_hex_colors(surround, "#991b1b", 0.72)
+            return self._darken_color(accent, 0.08)
+        accent = self._blend_hex_colors(surround, "#fca5a5", 0.68)
+        return self._lighten_color(accent, 0.08)
+
+    def _surround_panel_color(self):
+        surround = self._surround_color()
+        if self._contrast_text_color(surround) == "#111827":
+            return self._darken_color(surround, 0.08)
+        return self._lighten_color(surround, 0.12)
+
+    def _surround_border_color(self):
+        surround = self._surround_color()
+        return self._blend_hex_colors(surround, self._contrast_text_color(surround), 0.24)
+
+    def _surround_muted_text_color(self):
+        surround = self._surround_color()
+        contrast = self._contrast_text_color(surround)
+        target = "#475569" if contrast == "#111827" else "#e2e8f0"
+        return self._blend_hex_colors(surround, target, 0.68)
+
+    def _apply_combobox_popdown_theme(self, combo, background, foreground):
+        if combo is None:
+            return
+        selection_bg = (
+            self._darken_color(background, 0.12)
+            if foreground == "#111827"
+            else self._lighten_color(background, 0.12)
+        )
+        try:
+            popdown = combo.tk.call("ttk::combobox::PopdownWindow", str(combo))
+            listbox = f"{popdown}.f.l"
+            combo.tk.call(
+                listbox,
+                "configure",
+                "-background",
+                background,
+                "-foreground",
+                foreground,
+                "-selectbackground",
+                selection_bg,
+                "-selectforeground",
+                foreground,
+                "-highlightthickness",
+                0,
+                "-borderwidth",
+                0,
+            )
+        except tk.TclError:
+            pass
+
+    def _apply_combobox_theme(self, combo, style_name, background, foreground, border):
+        if combo is None:
+            return
+        style = ttk.Style(self.root)
+        style.configure(
+            style_name,
+            foreground=foreground,
+            fieldbackground=background,
+            background=background,
+            selectbackground=background,
+            selectforeground=foreground,
+            bordercolor=border,
+            lightcolor=border,
+            darkcolor=border,
+            arrowcolor=foreground,
+            insertcolor=foreground,
+            relief="flat",
+        )
+        style.map(
+            style_name,
+            foreground=[("readonly", foreground), ("disabled", foreground)],
+            fieldbackground=[("readonly", background), ("disabled", background)],
+            background=[("readonly", background), ("disabled", background)],
+            selectbackground=[("readonly", background), ("disabled", background)],
+            selectforeground=[("readonly", foreground), ("disabled", foreground)],
+            bordercolor=[("readonly", border), ("focus", border), ("disabled", border)],
+            lightcolor=[("readonly", border), ("focus", border), ("disabled", border)],
+            darkcolor=[("readonly", border), ("focus", border), ("disabled", border)],
+            arrowcolor=[("readonly", foreground), ("disabled", foreground)],
+        )
+        combo.configure(style=style_name)
+        self._apply_combobox_popdown_theme(combo, background, foreground)
+
+    def _apply_wheel_controls_theme(self):
+        surround = self._surround_color()
+        surround_text = self._contrast_text_color(surround)
+        border = self._surround_border_color()
+
+        if self.wheel_controls_frame is not None:
+            self.wheel_controls_frame.configure(bg=surround, highlightbackground=border)
+        if self.wheel_controls_row is not None:
+            self.wheel_controls_row.configure(bg=surround)
+        if self.wheel_controls_label is not None:
+            self.wheel_controls_label.configure(bg=surround, fg=surround_text)
+        if self.wheel_type_combo is None:
+            return
+
+        self._apply_combobox_theme(self.wheel_type_combo, "BoardWheel.TCombobox", surround, surround_text, border)
+
+    def _apply_call_bet_popup_theme(self):
+        if self.call_bet_popup is None or not self.call_bet_popup.winfo_exists():
+            return
+
+        surround = self._surround_color()
+        surround_text = self._contrast_text_color(surround)
+        panel = self._surround_panel_color()
+        border = self._surround_border_color()
+        muted_text = self._surround_muted_text_color()
+        accent = "#2563eb"
+        accent_active = "#1d4ed8"
+        secondary_active = (
+            self._lighten_color(panel, 0.08)
+            if surround_text == "#111827"
+            else self._darken_color(panel, 0.08)
+        )
+
+        self.call_bet_popup.configure(bg=surround)
+
+        def walk(widget):
+            cls = widget.winfo_class()
+            if cls in {"Frame", "Labelframe"}:
+                config = {"bg": surround}
+                if cls == "Labelframe":
+                    config["fg"] = surround_text
+                try:
+                    widget.configure(**config)
+                except tk.TclError:
+                    pass
+            elif cls == "Label":
+                fg = muted_text if str(widget.cget("fg")).lower() == "#475569" else surround_text
+                try:
+                    widget.configure(bg=surround, fg=fg)
+                except tk.TclError:
+                    pass
+            elif cls == "Entry":
+                try:
+                    widget.configure(
+                        bg=panel,
+                        fg=surround_text,
+                        insertbackground=surround_text,
+                        highlightbackground=border,
+                        highlightcolor=border,
+                        disabledbackground=panel,
+                        disabledforeground=surround_text,
+                        relief="flat",
+                        bd=1,
+                    )
+                except tk.TclError:
+                    pass
+            elif cls == "Button":
+                text = str(widget.cget("text")).strip().lower()
+                if text == "add bet":
+                    config = {
+                        "bg": accent,
+                        "fg": "#ffffff",
+                        "activebackground": accent_active,
+                        "activeforeground": "#ffffff",
+                    }
+                else:
+                    config = {
+                        "bg": panel,
+                        "fg": surround_text,
+                        "activebackground": secondary_active,
+                        "activeforeground": surround_text,
+                    }
+                try:
+                    widget.configure(highlightbackground=border, **config)
+                except tk.TclError:
+                    pass
+            for child in widget.winfo_children():
+                walk(child)
+
+        walk(self.call_bet_popup)
+        self._apply_combobox_theme(self.call_bet_name_combo, "BoardCallBet.TCombobox", panel, surround_text, border)
+        for _, digit_combo in self.call_bet_final_digit_controls:
+            self._apply_combobox_theme(digit_combo, "BoardCallBet.TCombobox", panel, surround_text, border)
+
+    def _apply_call_bets_theme(self):
+        surround = self._surround_color()
+        surround_text = self._contrast_text_color(surround)
+        panel = self._surround_panel_color()
+        border = self._surround_border_color()
+        selection_bg = self._blend_hex_colors(panel, "#2563eb", 0.45 if surround_text == "#111827" else 0.58)
+        selection_fg = self._contrast_text_color(selection_bg)
+
+        for widget in (
+            self.call_bets_display_host,
+            self.call_bets_display_inner,
+            self.call_bets_display_row,
+        ):
+            if widget is not None:
+                widget.configure(bg=surround)
+
+        for panel_widget in (self.call_bets_left_panel, self.call_bets_right_panel):
+            if panel_widget is not None:
+                panel_widget.configure(bg=surround, fg=surround_text, highlightbackground=border, highlightcolor=border)
+
+        for listbox in (self.call_bets_listbox_left, self.call_bets_listbox_right):
+            if listbox is not None:
+                listbox.configure(
+                    bg=panel,
+                    fg=surround_text,
+                    selectbackground=selection_bg,
+                    selectforeground=selection_fg,
+                    highlightbackground=border,
+                    highlightcolor=border,
+                    relief="flat",
+                    bd=1,
+                )
+
+        if self.call_bets_button is not None:
+            self.call_bets_button.configure(highlightbackground=border)
+
+        self._apply_call_bet_popup_theme()
+
     def _build_navigation(self):
-        nav = tk.Frame(self.root, bg="#e5e7eb")
+        nav = tk.Canvas(
+            self.root,
+            bg=self._surround_color(),
+            highlightthickness=0,
+            bd=0,
+            height=1,
+        )
         nav.pack(fill="x", padx=12, pady=(8, 6))
         self.nav_frame = nav
+        self.nav_texture_item = nav.create_image(0, 0, anchor="nw")
+        self.nav_layout_after_id = None
+        self.nav_button_window_ids = {}
+        nav.bind("<Configure>", self._schedule_navigation_layout)
         self.nav_buttons = {}
 
         nav_specs = (
@@ -555,7 +1564,7 @@ class RouletteBoardApp:
         )
         for screen_key, label in nav_specs:
             btn = tk.Button(
-                nav,
+                self.nav_frame,
                 text=label,
                 command=lambda key=screen_key: self._show_screen(key),
                 font=("Segoe UI", 10, "bold"),
@@ -564,14 +1573,75 @@ class RouletteBoardApp:
                 bd=1,
                 relief="raised",
             )
-            btn.pack(side="left", padx=(0, 6))
             self.nav_buttons[screen_key] = btn
+            self.nav_button_window_ids[screen_key] = self.nav_frame.create_window(0, 0, anchor="nw", window=btn)
+        self._layout_navigation()
+
+    def _schedule_navigation_layout(self, _event=None):
+        if not hasattr(self, "nav_frame") or self.nav_frame is None:
+            return
+        after_id = getattr(self, "nav_layout_after_id", None)
+        if after_id is not None:
+            try:
+                self.root.after_cancel(after_id)
+            except tk.TclError:
+                pass
+        self.nav_layout_after_id = self.root.after_idle(self._layout_navigation)
+
+    def _layout_navigation(self):
+        self.nav_layout_after_id = None
+        if not hasattr(self, "nav_frame") or self.nav_frame is None:
+            return
+        if not self.nav_buttons:
+            return
+        x_pos = 0
+        max_h = 1
+        for index, (screen_key, btn) in enumerate(self.nav_buttons.items()):
+            if screen_key not in self.nav_button_window_ids:
+                continue
+            self.nav_frame.coords(self.nav_button_window_ids[screen_key], x_pos, 0)
+            x_pos += max(1, int(btn.winfo_reqwidth()))
+            if index < len(self.nav_buttons) - 1:
+                x_pos += 6
+            max_h = max(max_h, int(btn.winfo_reqheight()))
+        canvas_w = max(x_pos, int(self.nav_frame.winfo_width()), 1)
+        current_h = int(float(self.nav_frame.cget("height")))
+        if current_h != max_h:
+            self.nav_frame.configure(height=max_h)
+        self.nav_frame.configure(scrollregion=(0, 0, canvas_w, max_h))
+        self._refresh_navigation_texture(width=canvas_w, height=max_h)
+
+    def _refresh_navigation_texture(self, width=None, height=None):
+        if not hasattr(self, "nav_frame") or self.nav_frame is None:
+            return
+        width = max(1, int(width) if width is not None else int(self.nav_frame.winfo_width()))
+        height = max(1, int(height) if height is not None else int(self.nav_frame.winfo_height()))
+        _nav_h, _top_h, surface_w, surface_h = self._board_surround_surface_metrics()
+        fill = self._surround_color()
+        texture = self._surround_texture()
+        self.nav_frame.configure(bg=fill)
+        if texture == "flat":
+            self.nav_frame.itemconfigure(self.nav_texture_item, image="")
+            return
+        img = self._get_texture_image(
+            fill,
+            texture,
+            width,
+            height,
+            origin_x=0,
+            origin_y=0,
+            surface_w=surface_w,
+            surface_h=surface_h,
+        )
+        self.nav_frame.itemconfigure(self.nav_texture_item, image=img)
+        self.nav_frame.coords(self.nav_texture_item, 0, 0)
+        self.nav_frame.tag_lower(self.nav_texture_item)
 
     def _build_screen_host(self):
-        self.screen_host = tk.Frame(self.root, bg="#FFFFFF")
+        self.screen_host = tk.Frame(self.root, bg=self._surround_color())
         self.screen_host.pack(fill="both", expand=True)
         self.screens = {
-            "board": tk.Frame(self.screen_host, bg="#FFFFFF"),
+            "board": tk.Frame(self.screen_host, bg=self._surround_color()),
             "system": tk.Frame(self.screen_host, bg="#FFFFFF"),
             "testing": tk.Frame(self.screen_host, bg="#FFFFFF"),
             "settings": tk.Frame(self.screen_host, bg="#FFFFFF"),
@@ -579,12 +1649,13 @@ class RouletteBoardApp:
 
     def _build_board_screen(self):
         board_screen = self.screens["board"]
-        self.board_content = tk.Frame(board_screen, bg="#FFFFFF")
+        self.board_content = tk.Frame(board_screen, bg=self._surround_color())
         self.board_content.pack(fill="both", expand=True)
 
         self._build_top_panel(self.board_content)
         self._build_board_canvas(self.board_content)
         self._build_layout()
+        self._schedule_board_top_panel_layout()
 
     def _build_system_creator_screen(self):
         system_screen = self.screens["system"]
@@ -660,7 +1731,7 @@ class RouletteBoardApp:
 
         appearance = tk.LabelFrame(
             content,
-            text="Board Appearance",
+            text="Appearance",
             bg="#FFFFFF",
             fg="#111827",
             padx=10,
@@ -669,19 +1740,154 @@ class RouletteBoardApp:
         )
         appearance.pack(fill="x", anchor="nw")
 
-        self.settings_theme_board_var = tk.StringVar(value=self._board_felt_color())
-        self.settings_theme_surround_var = tk.StringVar(value=self._surround_color())
+        self.settings_theme_board_var = tk.StringVar(value=self._theme_color_choice("board_felt_color"))
+        self.settings_theme_surround_var = tk.StringVar(value=self._theme_color_choice("surround_color"))
+        self.settings_theme_dozens_var = tk.StringVar(value=self._theme_color_choice("dozens_color"))
+        self.settings_theme_columns_var = tk.StringVar(value=self._theme_color_choice("columns_color"))
+        self.settings_theme_outside_low_high_var = tk.StringVar(value=self._theme_color_choice("outside_low_high_color"))
+        self.settings_theme_outside_even_odd_var = tk.StringVar(value=self._theme_color_choice("outside_even_odd_color"))
+        self.settings_theme_outside_red_black_var = tk.StringVar(value=self._theme_color_choice("outside_red_black_color"))
+        self.settings_theme_zero_var = tk.StringVar(value=self._theme_color_choice("zero_color"))
+        self.settings_theme_board_texture_var = tk.StringVar(value=self._board_felt_texture())
+        self.settings_theme_surround_texture_var = tk.StringVar(value=self._surround_texture())
+        self.settings_theme_dozens_texture_var = tk.StringVar(value="flat")
+        self.settings_theme_columns_texture_var = tk.StringVar(value="flat")
+        self.settings_theme_zero_texture_var = tk.StringVar(value="flat")
+        self.settings_theme_numbers_font_var = tk.StringVar(value=self._theme_color_choice("numbers_font_color"))
+        self.settings_theme_zero_font_var = tk.StringVar(value=self._theme_color_choice("zero_font_color"))
+        self.settings_theme_columns_font_var = tk.StringVar(value=self._theme_color_choice("columns_font_color"))
+        self.settings_theme_dozens_font_var = tk.StringVar(value=self._theme_color_choice("dozens_font_color"))
+        self.settings_theme_outside_low_high_font_var = tk.StringVar(value=self._theme_color_choice("outside_low_high_font_color"))
+        self.settings_theme_outside_even_odd_font_var = tk.StringVar(value=self._theme_color_choice("outside_even_odd_font_color"))
+        self.settings_theme_outside_red_black_font_var = tk.StringVar(value=self._theme_color_choice("outside_red_black_font_color"))
 
-        row1 = tk.Frame(appearance, bg="#FFFFFF")
-        row1.pack(anchor="w", pady=(0, 6))
-        tk.Label(row1, text="Board felt color (#RRGGBB)", bg="#FFFFFF", fg="#111827", font=("Segoe UI", 9)).pack(side="left")
-        tk.Entry(row1, textvariable=self.settings_theme_board_var, width=12).pack(side="left", padx=(8, 0))
+        header = tk.Frame(appearance, bg="#FFFFFF")
+        header.pack(anchor="w", pady=(0, 8))
+        tk.Label(header, text="", bg="#FFFFFF", fg="#64748b", font=("Segoe UI", 8, "bold"), width=14, anchor="w").pack(side="left")
+        tk.Label(header, text="Surface", bg="#FFFFFF", fg="#64748b", font=("Segoe UI", 8, "bold"), width=9, anchor="center").pack(side="left", padx=(8, 0))
+        tk.Label(header, text="Texture", bg="#FFFFFF", fg="#64748b", font=("Segoe UI", 8, "bold"), width=14, anchor="center").pack(side="left", padx=(8, 0))
+        tk.Label(header, text="Text", bg="#FFFFFF", fg="#64748b", font=("Segoe UI", 8, "bold"), width=9, anchor="center").pack(side="left", padx=(8, 0))
 
-        row2 = tk.Frame(appearance, bg="#FFFFFF")
-        row2.pack(anchor="w")
-        tk.Label(row2, text="Surround color (#RRGGBB)", bg="#FFFFFF", fg="#111827", font=("Segoe UI", 9)).pack(side="left")
-        tk.Entry(row2, textvariable=self.settings_theme_surround_var, width=12).pack(side="left", padx=(18, 0))
+        def add_appearance_row(
+            label,
+            color_var,
+            texture_var=None,
+            text_var=None,
+            pady=(0, 6),
+            color_standard_key=None,
+            text_standard_key=None,
+        ):
+            row = tk.Frame(appearance, bg="#FFFFFF")
+            row.pack(anchor="w", pady=pady)
+            tk.Label(row, text=label, bg="#FFFFFF", fg="#111827", font=("Segoe UI", 9), width=14, anchor="w").pack(side="left")
+            color_preview = self._standard_theme_color(color_standard_key) if color_standard_key else "#e5e7eb"
+            self._make_color_button(
+                row,
+                color_var,
+                standard_preview=color_preview,
+                dialog_title=f"{label} surface color",
+            ).pack(side="left", padx=(8, 0))
+            if texture_var is not None:
+                self._make_texture_selector(row, texture_var).pack(side="left", padx=(8, 0))
+            else:
+                tk.Label(
+                    row,
+                    text="N/A",
+                    bg="#FFFFFF",
+                    fg="#94a3b8",
+                    font=("Segoe UI", 9, "italic"),
+                    width=14,
+                    anchor="center",
+                ).pack(side="left", padx=(8, 0))
+            if text_var is not None:
+                text_preview = self._standard_theme_color(text_standard_key) if text_standard_key else "#e5e7eb"
+                self._make_color_button(
+                    row,
+                    text_var,
+                    standard_preview=text_preview,
+                    dialog_title=f"{label} text color",
+                ).pack(side="left", padx=(8, 0))
+            else:
+                tk.Label(
+                    row,
+                    text="N/A",
+                    bg="#FFFFFF",
+                    fg="#94a3b8",
+                    font=("Segoe UI", 9, "italic"),
+                    width=9,
+                    anchor="center",
+                ).pack(side="left", padx=(8, 0))
 
+        add_appearance_row(
+            "Board",
+            self.settings_theme_board_var,
+            self.settings_theme_board_texture_var,
+            self.settings_theme_numbers_font_var,
+            color_standard_key="board_felt_color",
+            text_standard_key="numbers_font_color",
+        )
+        add_appearance_row(
+            "Surround",
+            self.settings_theme_surround_var,
+            self.settings_theme_surround_texture_var,
+            color_standard_key="surround_color",
+        )
+        add_appearance_row(
+            "Zero",
+            self.settings_theme_zero_var,
+            text_var=self.settings_theme_zero_font_var,
+            color_standard_key="zero_color",
+            text_standard_key="zero_font_color",
+        )
+        add_appearance_row(
+            "Dozens",
+            self.settings_theme_dozens_var,
+            text_var=self.settings_theme_dozens_font_var,
+            color_standard_key="dozens_color",
+            text_standard_key="dozens_font_color",
+        )
+        add_appearance_row(
+            "Columns",
+            self.settings_theme_columns_var,
+            text_var=self.settings_theme_columns_font_var,
+            color_standard_key="columns_color",
+            text_standard_key="columns_font_color",
+        )
+        self.settings_outside_bets_heading_font = tkfont.Font(
+            family="Segoe UI",
+            size=9,
+            weight="bold",
+            underline=1,
+        )
+        tk.Label(
+            appearance,
+            text="Outside Bets",
+            bg="#FFFFFF",
+            fg="#000000",
+            font=self.settings_outside_bets_heading_font,
+            anchor="w",
+        ).pack(anchor="w", pady=(2, 4))
+        add_appearance_row(
+            "Low / High",
+            self.settings_theme_outside_low_high_var,
+            text_var=self.settings_theme_outside_low_high_font_var,
+            color_standard_key="outside_low_high_color",
+            text_standard_key="outside_low_high_font_color",
+        )
+        add_appearance_row(
+            "Even / Odd",
+            self.settings_theme_outside_even_odd_var,
+            text_var=self.settings_theme_outside_even_odd_font_var,
+            color_standard_key="outside_even_odd_color",
+            text_standard_key="outside_even_odd_font_color",
+        )
+        add_appearance_row(
+            "Red / Black",
+            self.settings_theme_outside_red_black_var,
+            text_var=self.settings_theme_outside_red_black_font_var,
+            color_standard_key="outside_red_black_color",
+            text_standard_key="outside_red_black_font_color",
+        )
         popup = tk.LabelFrame(
             content,
             text="Hover Popup",
@@ -703,6 +1909,7 @@ class RouletteBoardApp:
             row3,
             text="Enable hover popups",
             variable=self.settings_popup_enabled_var,
+            command=self._on_popup_enabled_toggle,
             bg="#FFFFFF",
             fg="#111827",
             activebackground="#FFFFFF",
@@ -1239,11 +2446,10 @@ class RouletteBoardApp:
             elif not matched:
                 continue
 
-            if matched or basis == "Count Based":
-                fired_trigger = trigger
-                self._set_stage("Recovery", reason=f"T{trigger['id']} matched")
-                self._execute_stage_trigger_action(trigger)
-                break
+            fired_trigger = trigger
+            self._set_stage("Recovery", reason=f"T{trigger['id']} matched")
+            self._execute_stage_trigger_action(trigger)
+            break
 
         start = self._safe_int(self.start_bankroll_var.get(), 0)
         raw_step = self.stage_profit_increment_var.get().strip()
@@ -2827,56 +4033,61 @@ class RouletteBoardApp:
         return f"${amount:,.2f}"
 
     def _build_top_panel(self, parent):
-        top = tk.Frame(parent, bg="#FFFFFF")
-        top.pack(fill="x", padx=12, pady=(4, 0))
+        surround_bg = self._surround_color()
+        self.board_top_panel = tk.Canvas(
+            parent,
+            bg=surround_bg,
+            highlightthickness=0,
+            bd=0,
+            height=1,
+        )
+        self.board_top_panel.pack(fill="x", padx=12, pady=(4, 0))
+        self.board_top_panel_texture_item = self.board_top_panel.create_image(0, 0, anchor="nw")
+        self.board_top_window_ids = {}
+        self.board_top_layout_after_id = None
+        self.board_top_panel.bind("<Configure>", self._schedule_board_top_panel_layout)
+        self.board_top_title_font = tkfont.Font(family="Segoe UI", size=10, weight="bold")
+        self.board_top_total_font = tkfont.Font(family="Segoe UI", size=14, weight="bold")
+        self.board_top_hint_font = tkfont.Font(family="Segoe UI", size=11, weight="bold")
+        self.board_top_label_band_h = self.board_top_title_font.metrics("linespace") + 4
+        self.legend_chip_canvas_size = 54
+        self.legend_chip_gap = 6
+        self.payout_title_text = "Spin Result Map"
+        self.wheel_title_text = "Wheel Type / Rules"
+        self.right_click_hint_text = "Right-click to remove Chips"
+        self.board_top_text_items = {
+            "chart_title": self.board_top_panel.create_text(0, 0, anchor="n", font=self.board_top_title_font),
+            "wheel_title": self.board_top_panel.create_text(0, 0, anchor="nw", font=self.board_top_title_font),
+            "total": self.board_top_panel.create_text(0, 0, anchor="nw", font=self.board_top_total_font),
+            "hint": self.board_top_panel.create_text(0, 0, anchor="nw", font=self.board_top_hint_font),
+        }
 
-        top_row = tk.Frame(top, bg="#FFFFFF")
-        top_row.pack(fill="x", anchor="n")
+        self.chart_host = tk.Frame(self.board_top_panel, bg=surround_bg)
+        self._build_payout_chart(self.chart_host)
 
-        # Keep spin result map as far left/top as possible.
-        self._build_payout_chart(top_row)
+        self.board_left_controls = tk.Frame(self.board_top_panel, bg=surround_bg)
+        self._build_wheel_controls(self.board_left_controls)
 
-        left_controls = tk.Frame(top_row, bg="#FFFFFF")
-        left_controls.pack(side="left", padx=(8, 0), anchor="n")
-
-        self._build_wheel_controls(left_controls)
-
-        self.legend_frame = tk.Frame(top_row, bg="#FFFFFF")
-        self.legend_frame.pack(side="left", fill="y", padx=(8, 0), anchor="n")
-
-        legend_chip_row = tk.Frame(self.legend_frame, bg="#FFFFFF")
-        legend_chip_row.pack(anchor="w")
-
+        self.legend_canvases = {}
+        self.legend_chip_window_ids = {}
         for denom in self.CHIP_DENOMS:
             chip_canvas = tk.Canvas(
-                legend_chip_row,
-                width=62,
-                height=62,
-                bg="#FFFFFF",
+                self.board_top_panel,
+                width=self.legend_chip_canvas_size,
+                height=self.legend_chip_canvas_size,
+                bg=surround_bg,
                 highlightthickness=0,
                 bd=0,
             )
-            chip_canvas.pack(side="left", padx=4)
-            self._draw_chip(chip_canvas, 31, 31, 24, denom, top_label=True)
+            chip_center = self.legend_chip_canvas_size // 2
+            self._draw_chip(chip_canvas, chip_center, chip_center, 24, denom, top_label=True)
             chip_canvas.bind("<Button-1>", lambda _e, d=denom: self._set_selected_chip(d))
             self.legend_canvases[denom] = chip_canvas
+            self.legend_chip_window_ids[denom] = self.board_top_panel.create_window(0, 0, anchor="nw", window=chip_canvas)
 
-        bet_controls = tk.Frame(top_row, bg="#FFFFFF")
-        bet_controls.pack(side="left", padx=(10, 0), fill="y", anchor="n")
-
-        controls_row = tk.Frame(bet_controls, bg="#FFFFFF")
-        controls_row.pack(anchor="w")
-        total_lbl = tk.Label(
-            controls_row,
-            textvariable=self.total_var,
-            bg="#FFFFFF",
-            fg="#000000",
-            font=("Segoe UI", 14, "bold"),
-        )
-        total_lbl.pack(side="left")
-
-        clear_btn = tk.Button(
-            controls_row,
+        self.bet_controls_frame = tk.Frame(self.board_top_panel, bg=surround_bg)
+        self.clear_btn = tk.Button(
+            self.bet_controls_frame,
             text="Clear",
             command=self._clear_bets,
             bg="#0000FF",
@@ -2886,26 +4097,28 @@ class RouletteBoardApp:
             relief="raised",
             bd=2,
             font=("Segoe UI", 11, "bold"),
+            anchor="center",
+            justify="center",
+            width=7,
             padx=12,
             pady=6,
         )
-        clear_btn.pack(side="left", padx=(16, 0))
+        self.clear_btn.pack(anchor="w")
 
-        tk.Label(
-            bet_controls,
-            text="Right-click to remove Chips",
-            bg="#FFFFFF",
-            fg="#ef4444",
-            font=("Segoe UI", 11, "bold"),
-            anchor="e",
-            justify="right",
-        ).pack(fill="x", pady=(4, 0))
+        self.board_top_window_ids = {
+            "chart": self.board_top_panel.create_window(0, 0, anchor="nw", window=self.chart_host),
+            "wheel": self.board_top_panel.create_window(0, 0, anchor="nw", window=self.board_left_controls),
+            "clear": self.board_top_panel.create_window(0, 0, anchor="nw", window=self.bet_controls_frame),
+        }
+        for widget in (self.chart_host, self.board_left_controls, self.bet_controls_frame):
+            widget.bind("<Configure>", self._schedule_board_top_panel_layout, add="+")
+        self.board_top_panel.tag_lower(self.board_top_panel_texture_item)
 
-        self.call_bets_display_host = tk.Frame(self.legend_frame, bg="#FFFFFF", highlightthickness=0, bd=0)
-        self.call_bets_display_host.pack(anchor="w", pady=(3, 3))
+        surround_bg = self._surround_color()
+        self.call_bets_display_host = tk.Frame(self.board_top_panel, bg=surround_bg, highlightthickness=0, bd=0)
         self.call_bets_display_row = self.call_bets_display_host
 
-        self.call_bets_display_inner = tk.Frame(self.call_bets_display_host, bg="#FFFFFF")
+        self.call_bets_display_inner = tk.Frame(self.call_bets_display_host, bg=surround_bg)
         self.call_bets_display_inner.pack(anchor="w")
 
         self.call_bets_button = tk.Button(
@@ -2927,8 +4140,8 @@ class RouletteBoardApp:
         self.call_bets_left_panel = tk.LabelFrame(
             self.call_bets_display_inner,
             text="Call Bets 1-3",
-            bg="#FFFFFF",
-            fg="#111827",
+            bg=surround_bg,
+            fg=self._contrast_text_color(surround_bg),
             padx=6,
             pady=4,
             font=("Segoe UI", 9, "bold"),
@@ -2948,8 +4161,8 @@ class RouletteBoardApp:
         self.call_bets_right_panel = tk.LabelFrame(
             self.call_bets_display_inner,
             text="Call Bets 4-6",
-            bg="#FFFFFF",
-            fg="#111827",
+            bg=surround_bg,
+            fg=self._contrast_text_color(surround_bg),
             padx=6,
             pady=4,
             font=("Segoe UI", 9, "bold"),
@@ -2966,35 +4179,246 @@ class RouletteBoardApp:
         self.call_bets_listbox_right.bind("<Button-3>", self._on_call_bet_list_click_right)
         self.call_bets_listbox_right.bind("<Button-2>", self._on_call_bet_list_click_right)
 
-        self.call_bets_display_host.update_idletasks()
-        self.call_bets_reserved_h = max(1, self.call_bets_display_host.winfo_reqheight())
-        self.call_bets_spacer = tk.Frame(
-            self.legend_frame,
-            bg="#FFFFFF",
-            height=self.call_bets_reserved_h,
-            highlightthickness=0,
-            bd=0,
-        )
-        self.call_bets_spacer.pack_propagate(False)
+        self.board_top_window_ids["call_bets"] = self.board_top_panel.create_window(0, 0, anchor="nw", window=self.call_bets_display_host)
+        self.board_top_panel.itemconfigure(self.board_top_window_ids["call_bets"], state="hidden")
+        self.call_bets_display_host.bind("<Configure>", self._schedule_board_top_panel_layout, add="+")
+        self.call_bets_spacer = None
+        self.call_bets_reserved_h = 0
 
+        self._apply_call_bets_theme()
         self._sync_wheel_option_controls()
         self._refresh_call_bets_list()
+        self._refresh_legend_highlight()
+        self._layout_board_top_panel()
+        self._schedule_board_top_panel_layout()
+        self._schedule_navigation_layout()
+
+    def _legend_zone_size(self):
+        if not hasattr(self, "legend_chip_canvas_size"):
+            return 0, 0, 0, 0, 0, 0, False
+        chip_row_w = (len(self.CHIP_DENOMS) * self.legend_chip_canvas_size) + ((len(self.CHIP_DENOMS) - 1) * self.legend_chip_gap)
+        chip_row_h = self.legend_chip_canvas_size
+        call_visible = bool(self._is_french_wheel() and self.call_bets_display_host is not None)
+        call_w = 0
+        call_h = 0
+        if call_visible and self.call_bets_display_host is not None:
+            call_w = int(self.call_bets_display_host.winfo_reqwidth())
+            call_h = int(self.call_bets_display_host.winfo_reqheight())
+        zone_w = max(chip_row_w, call_w)
+        zone_h = chip_row_h + (6 + call_h if call_visible and call_h > 0 else 0)
+        return zone_w, zone_h, chip_row_w, chip_row_h, call_w, call_h, call_visible
+
+    def _bets_zone_size(self):
+        if not hasattr(self, "board_top_total_font"):
+            return 0, 0, 0, 0, 0, 0, 0, 0
+        total_text = self.total_var.get()
+        hint_text = self.right_click_hint_text
+        total_w = self.board_top_total_font.measure(total_text)
+        total_h = self.board_top_total_font.metrics("linespace")
+        hint_w = self.board_top_hint_font.measure(hint_text)
+        hint_h = self.board_top_hint_font.metrics("linespace")
+        button_w = int(self.bet_controls_frame.winfo_reqwidth()) if self.bet_controls_frame is not None else 0
+        button_h = int(self.bet_controls_frame.winfo_reqheight()) if self.bet_controls_frame is not None else 0
+        zone_w = max(total_w + 16 + button_w, hint_w)
+        zone_h = max(total_h, button_h) + 6 + hint_h
+        return zone_w, zone_h, total_w, total_h, hint_w, hint_h, button_w, button_h
+
+    def _board_surround_surface_metrics(self):
+        nav_h = 0
+        nav_w = 0
+        if hasattr(self, "nav_frame") and self.nav_frame is not None:
+            try:
+                nav_h = max(int(self.nav_frame.winfo_height()), int(float(self.nav_frame.cget("height"))))
+            except (TypeError, ValueError, tk.TclError):
+                nav_h = max(nav_h, 0)
+            try:
+                nav_w = max(int(self.nav_frame.winfo_width()), int(self.nav_frame.winfo_reqwidth()))
+            except tk.TclError:
+                nav_w = max(nav_w, 0)
+            nav_h = max(nav_h, int(self.nav_frame.winfo_reqheight()))
+            nav_btn_width = 0
+            nav_btn_height = 0
+            for index, btn in enumerate(self.nav_buttons.values()):
+                nav_btn_width += int(btn.winfo_reqwidth())
+                if index < len(self.nav_buttons) - 1:
+                    nav_btn_width += 6
+                nav_btn_height = max(nav_btn_height, int(btn.winfo_reqheight()))
+            nav_w = max(nav_w, nav_btn_width)
+            nav_h = max(nav_h, nav_btn_height)
+
+        top_h = 0
+        top_w = 0
+        if hasattr(self, "board_top_panel") and self.board_top_panel is not None:
+            try:
+                top_h = max(int(self.board_top_panel.winfo_height()), int(float(self.board_top_panel.cget("height"))))
+            except (TypeError, ValueError, tk.TclError):
+                top_h = max(top_h, 0)
+            try:
+                top_w = max(int(self.board_top_panel.winfo_width()), int(self.board_top_panel.winfo_reqwidth()))
+            except tk.TclError:
+                top_w = max(top_w, 0)
+            top_h = max(top_h, int(self.board_top_panel.winfo_reqheight()))
+        legend_w, legend_h, _, _, _, _, _ = self._legend_zone_size()
+        bets_w, bets_h, _, _, _, _, _, _ = self._bets_zone_size()
+        top_widgets = []
+        if getattr(self, "chart_host", None) is not None:
+            top_widgets.append((int(self.chart_host.winfo_reqwidth()), self.board_top_label_band_h + int(self.chart_host.winfo_reqheight()), 0))
+        if getattr(self, "board_left_controls", None) is not None:
+            top_widgets.append((int(self.board_left_controls.winfo_reqwidth()), self.board_top_label_band_h + int(self.board_left_controls.winfo_reqheight()), 8))
+        if legend_w > 0:
+            top_widgets.append((legend_w, self.board_top_label_band_h + legend_h, 8))
+        if bets_w > 0:
+            top_widgets.append((bets_w, self.board_top_label_band_h + bets_h, 10))
+        req_top_w = 0
+        req_top_h = 0
+        for width, height, gap in top_widgets:
+            if req_top_w > 0:
+                req_top_w += gap
+            req_top_w += width
+            req_top_h = max(req_top_h, height)
+        top_w = max(top_w, req_top_w)
+        top_h = max(top_h, req_top_h)
+        canvas_w = int(getattr(self, "canvas_w", 0))
+        canvas_h = int(getattr(self, "canvas_h", 0))
+        surface_w = max(1, nav_w, top_w, canvas_w)
+        surface_h = max(1, nav_h + top_h + canvas_h)
+        return nav_h, top_h, surface_w, surface_h
+
+    def _schedule_board_top_panel_layout(self, _event=None):
+        if not hasattr(self, "board_top_panel") or self.board_top_panel is None:
+            return
+        after_id = getattr(self, "board_top_layout_after_id", None)
+        if after_id is not None:
+            try:
+                self.root.after_cancel(after_id)
+            except tk.TclError:
+                pass
+        self.board_top_layout_after_id = self.root.after_idle(self._layout_board_top_panel)
+
+    def _layout_board_top_panel(self):
+        self.board_top_layout_after_id = None
+        if not hasattr(self, "board_top_panel") or self.board_top_panel is None:
+            return
+        if not getattr(self, "board_top_window_ids", None):
+            return
+
+        surround_text = self._contrast_text_color(self._surround_color())
+        content_y = self.board_top_label_band_h
+        legend_w, legend_h, chip_row_w, chip_row_h, call_w, call_h, call_visible = self._legend_zone_size()
+        bets_w, bets_h, total_w, total_h, _, hint_h, _, button_h = self._bets_zone_size()
+        x_pos = 0
+        max_h = 1
+
+        chart_w = int(self.chart_host.winfo_reqwidth()) if self.chart_host is not None else 0
+        chart_h = int(self.chart_host.winfo_reqheight()) if self.chart_host is not None else 0
+        if self.chart_host is not None and "chart" in self.board_top_window_ids:
+            self.board_top_panel.coords(self.board_top_window_ids["chart"], x_pos, content_y)
+            self.board_top_panel.itemconfigure(self.board_top_text_items["chart_title"], text=self.payout_title_text, fill=surround_text)
+            self.board_top_panel.coords(self.board_top_text_items["chart_title"], x_pos + (chart_w / 2), 0)
+            x_pos += chart_w
+            max_h = max(max_h, content_y + chart_h)
+
+        wheel_x = x_pos + (8 if x_pos > 0 else 0)
+        wheel_w = int(self.board_left_controls.winfo_reqwidth()) if self.board_left_controls is not None else 0
+        wheel_h = int(self.board_left_controls.winfo_reqheight()) if self.board_left_controls is not None else 0
+        if self.board_left_controls is not None and "wheel" in self.board_top_window_ids:
+            self.board_top_panel.coords(self.board_top_window_ids["wheel"], wheel_x, content_y)
+            self.board_top_panel.itemconfigure(self.board_top_text_items["wheel_title"], text=self.wheel_title_text, fill=surround_text)
+            self.board_top_panel.coords(self.board_top_text_items["wheel_title"], wheel_x, 0)
+            x_pos = wheel_x + wheel_w
+            max_h = max(max_h, content_y + wheel_h)
+
+        legend_x = x_pos + (8 if x_pos > 0 else 0)
+        for index, denom in enumerate(self.CHIP_DENOMS):
+            if denom not in self.legend_chip_window_ids:
+                continue
+            chip_x = legend_x + index * (self.legend_chip_canvas_size + self.legend_chip_gap)
+            self.board_top_panel.coords(self.legend_chip_window_ids[denom], chip_x, content_y)
+        if "call_bets" in self.board_top_window_ids:
+            if call_visible:
+                call_x = legend_x + max(0, (legend_w - call_w) // 2)
+                call_y = content_y + chip_row_h + 6
+                self.board_top_panel.coords(self.board_top_window_ids["call_bets"], call_x, call_y)
+                self.board_top_panel.itemconfigure(self.board_top_window_ids["call_bets"], state="normal")
+            else:
+                self.board_top_panel.itemconfigure(self.board_top_window_ids["call_bets"], state="hidden")
+        x_pos = legend_x + legend_w
+        max_h = max(max_h, content_y + legend_h)
+
+        bets_x = x_pos + (10 if x_pos > 0 else 0)
+        total_x = bets_x
+        total_y = content_y + max(0, (button_h - total_h) // 2)
+        clear_x = bets_x + total_w + 16
+        if "clear" in self.board_top_window_ids:
+            self.board_top_panel.coords(self.board_top_window_ids["clear"], clear_x, content_y)
+        self.board_top_panel.itemconfigure(self.board_top_text_items["total"], text=self.total_var.get(), fill=surround_text)
+        self.board_top_panel.coords(self.board_top_text_items["total"], total_x, total_y)
+        self.board_top_panel.itemconfigure(
+            self.board_top_text_items["hint"],
+            text=self.right_click_hint_text,
+            fill=self._surround_hint_color(),
+        )
+        self.board_top_panel.coords(self.board_top_text_items["hint"], total_x, content_y + button_h + 6)
+        x_pos = bets_x + bets_w
+        max_h = max(max_h, content_y + bets_h)
+
+        canvas_w = max(1, x_pos, int(self.board_top_panel.winfo_width()))
+        current_h = int(float(self.board_top_panel.cget("height")))
+        if current_h != max_h:
+            self.board_top_panel.configure(height=max_h)
+        self.board_top_panel.configure(scrollregion=(0, 0, canvas_w, max_h))
+        self._refresh_board_top_panel_texture(width=canvas_w, height=max_h)
+
+    def _refresh_board_top_panel_texture(self, width=None, height=None):
+        if not hasattr(self, "board_top_panel") or self.board_top_panel is None:
+            return
+        width = max(1, int(width) if width is not None else int(self.board_top_panel.winfo_width()))
+        height = max(1, int(height) if height is not None else int(self.board_top_panel.winfo_height()))
+        nav_h, top_h, surface_w, surface_h = self._board_surround_surface_metrics()
+        surface_w = max(surface_w, width)
+        surface_h = max(surface_h, nav_h + top_h)
+        fill = self._surround_color()
+        texture = self._surround_texture()
+        self.board_top_panel.configure(bg=fill)
+        if texture == "flat":
+            self.board_top_panel.itemconfigure(self.board_top_panel_texture_item, image="")
+            return
+        img = self._get_texture_image(
+            fill,
+            texture,
+            width,
+            height,
+            origin_x=0,
+            origin_y=nav_h,
+            surface_w=surface_w,
+            surface_h=surface_h,
+        )
+        self.board_top_panel.itemconfigure(self.board_top_panel_texture_item, image=img)
+        self.board_top_panel.coords(self.board_top_panel_texture_item, 0, 0)
+        self.board_top_panel.tag_lower(self.board_top_panel_texture_item)
 
     def _build_wheel_controls(self, parent):
-        wheel_frame = tk.LabelFrame(
+        surround_bg = self._surround_color()
+        surround_text = self._contrast_text_color(surround_bg)
+        border = self._blend_hex_colors(surround_bg, surround_text, 0.24)
+        wheel_frame = tk.Frame(
             parent,
-            text="Wheel Type / Rules",
-            bg="#FFFFFF",
-            fg="#111827",
+            bg=surround_bg,
             padx=8,
             pady=6,
-            font=("Segoe UI", 10, "bold"),
+            highlightthickness=1,
+            highlightbackground=border,
+            bd=0,
         )
         wheel_frame.pack(fill="x", expand=False, anchor="n", padx=(0, 8), pady=(0, 0))
+        self.wheel_controls_frame = wheel_frame
 
-        row1 = tk.Frame(wheel_frame, bg="#FFFFFF")
+        row1 = tk.Frame(wheel_frame, bg=surround_bg)
         row1.pack(anchor="w")
-        tk.Label(row1, text="Wheel", bg="#FFFFFF", font=("Segoe UI", 9)).pack(side="left")
+        self.wheel_controls_row = row1
+        wheel_label = tk.Label(row1, text="Wheel", bg=surround_bg, fg=surround_text, font=("Segoe UI", 9))
+        wheel_label.pack(side="left")
+        self.wheel_controls_label = wheel_label
         self.wheel_type_combo = ttk.Combobox(
             row1,
             textvariable=self.wheel_type_var,
@@ -3004,6 +4428,7 @@ class RouletteBoardApp:
         )
         self.wheel_type_combo.pack(side="left", padx=(6, 0))
         self.wheel_type_combo.bind("<<ComboboxSelected>>", self._on_wheel_settings_changed)
+        self._apply_wheel_controls_theme()
 
         self.wheel_call_button_row = None
 
@@ -3042,17 +4467,12 @@ class RouletteBoardApp:
             else:
                 self.call_bets_button.configure(state="disabled")
                 self._close_call_bet_popup()
-        if self.call_bets_display_host is not None:
-            if is_french:
-                if self.call_bets_spacer is not None and self.call_bets_spacer.winfo_manager():
-                    self.call_bets_spacer.pack_forget()
-                if not self.call_bets_display_host.winfo_manager():
-                    self.call_bets_display_host.pack(anchor="w", pady=(3, 3))
-            else:
-                if self.call_bets_display_host.winfo_manager():
-                    self.call_bets_display_host.pack_forget()
-                if self.call_bets_spacer is not None and not self.call_bets_spacer.winfo_manager():
-                    self.call_bets_spacer.pack(anchor="w", pady=(3, 3))
+        if "call_bets" in getattr(self, "board_top_window_ids", {}):
+            self.board_top_panel.itemconfigure(
+                self.board_top_window_ids["call_bets"],
+                state="normal" if is_french else "hidden",
+            )
+        self._schedule_board_top_panel_layout()
 
     def _position_call_bets_display_boxes(self):
         # Call-bet list boxes now live in-flow directly below the chip legend.
@@ -3109,18 +4529,9 @@ class RouletteBoardApp:
         self._position_call_bets_display_boxes()
 
     def _build_payout_chart(self, parent):
-        chart_wrap = tk.Frame(parent, bg="#FFFFFF")
+        chart_wrap = tk.Frame(parent, bg=self._surround_color())
         chart_wrap.pack(side="left", padx=(0, 0), anchor="n")
         self.chart_wrap = chart_wrap
-
-        self.payout_title = tk.Label(
-            chart_wrap,
-            text="Spin Result Map",
-            bg="#FFFFFF",
-            fg="#000000",
-            font=("Segoe UI", 10, "bold"),
-        )
-        self.payout_title.pack(anchor="center")
 
         self.payout_canvas = tk.Canvas(
             chart_wrap,
@@ -3140,7 +4551,7 @@ class RouletteBoardApp:
             return
 
         total_stake = sum(sum(v) for v in self.bets.values())
-        self.payout_title.configure(text=f"Spin Result Map (Net win/loss per spin, Total Bet ${total_stake:,})")
+        self.payout_title_text = f"Spin Result Map (Net win/loss per spin, Total Bet ${total_stake:,})"
         self.payout_canvas.delete("all")
 
         pad_x = self.map_pad
@@ -3164,6 +4575,7 @@ class RouletteBoardApp:
                 x = grid_left + c * mini_cell_w
                 y = top + r * mini_cell_h
                 self._draw_spin_cell(x, y, mini_cell_w, mini_cell_h, str(n), self._net_for_outcome(n))
+        self._schedule_board_top_panel_layout()
 
     def _align_spin_map_right(self):
         if not hasattr(self, "chart_wrap"):
@@ -3201,8 +4613,8 @@ class RouletteBoardApp:
         )
 
     def _net_for_outcome(self, outcome):
-        total_stake = 0.0
-        total_return = 0.0
+        total_stake = 0
+        total_return = 0
         apply_en_prison = self._is_french_en_prison()
         apply_half_back = self._is_french_half_back()
         next_prison_pending = set(self.en_prison_pending) if apply_en_prison else set()
@@ -3227,14 +4639,14 @@ class RouletteBoardApp:
             if spot_id in self.EVEN_MONEY_OUTSIDE_IDS and outcome == 0 and (apply_en_prison or apply_half_back):
                 total_stake += spot_total
                 if apply_half_back:
-                    total_return += spot_total / 2
+                    total_return += spot_total // 2
                 else:
                     total_return += spot_total
                     next_prison_pending.add(spot_id)
                 continue
 
             covered = self._spot_covers_outcome(spot_id, outcome)
-            payout_mult = int(self.spots[spot_id]["payout"].split(":")[0])
+            payout_mult = self.spots[spot_id]["payout_mult"]
             total_stake += spot_total
             if covered:
                 total_return += spot_total * (payout_mult + 1)
@@ -3290,6 +4702,14 @@ class RouletteBoardApp:
         return outcome in numbers
 
     def _spot_numbers(self, spot_id):
+        cached = self._spot_numbers_cache.get(spot_id)
+        if cached is not None:
+            return cached
+        result = self._compute_spot_numbers(spot_id)
+        self._spot_numbers_cache[spot_id] = result
+        return result
+
+    def _compute_spot_numbers(self, spot_id):
         if spot_id.startswith("straight_"):
             value = spot_id.replace("straight_", "")
             parsed = self._parse_special_token(value)
@@ -3351,8 +4771,8 @@ class RouletteBoardApp:
         return set()
 
     def _build_board_canvas(self, parent):
-        self.canvas_w = 1880
-        self.canvas_h = 860
+        self.canvas_w = self.CANVAS_W
+        self.canvas_h = self.CANVAS_H
         self.canvas = tk.Canvas(
             parent,
             width=self.canvas_w,
@@ -3368,22 +4788,21 @@ class RouletteBoardApp:
 
     def _build_layout(self):
         self.marker_spot_ids = set()
-        self.board_y = 26
-        self.cell_w = 112
-        self.cell_h = 136
-        self.cols = 12
-        self.vertical_gap = 18
-        self.outside_box_gap = 3
-        self.column_gap = 14
+        self.board_y = self._LAYOUT_BOARD_Y
+        self.cell_w = self._LAYOUT_CELL_W
+        self.cell_h = self._LAYOUT_CELL_H
+        self.cols = self._LAYOUT_GRID_COLS
+        self.vertical_gap = self._LAYOUT_VERTICAL_GAP
+        self.outside_box_gap = self._LAYOUT_OUTSIDE_BOX_GAP
+        self.column_gap = self._LAYOUT_COLUMN_GAP
         self.zero_gap = self.column_gap
-        base_column_w = 128 - 25
-        self.column_bet_w = max(56, int(round(base_column_w * (2.0 / 3.0))))
+        self.column_bet_w = max(56, int(round(self._LAYOUT_BASE_COLUMN_W * (2.0 / 3.0))))
         # Normalize every wheel to the triple-zero footprint width.
         # Non-triple layouts keep a left spacer before the zero pockets.
         self.zero_w = int(round(self.column_bet_w * 2.1))
         self.zero_draw_w = self.zero_w if self._is_triple_zero_wheel() else self.column_bet_w
         self.zero_left_spacer_w = max(0, self.zero_w - self.zero_draw_w)
-        self.placed_chip_radius = 14
+        self.placed_chip_radius = self._LAYOUT_CHIP_RADIUS
         self.marker_hover_radius = self.placed_chip_radius
         content_w = self.zero_w + self.zero_gap + self.cols * self.cell_w + self.column_gap + self.column_bet_w
         self.available_w = self.root.winfo_screenwidth() - 24
@@ -3405,6 +4824,9 @@ class RouletteBoardApp:
         self.table_right_edge = frame_x2
         self._draw_glass_swirl_background(frame_x1, frame_y1, frame_x2, frame_y2)
         self._draw_table_frame(frame_x1, frame_y1, frame_x2, frame_y2)
+        # Push background items to the absolute bottom NOW so every box/text created
+        # below is naturally above them — prevents create_image tiles from overlapping boxes.
+        self.canvas.tag_lower("board_bg")
 
         self._draw_zero_cell(self.zero_cell_x, num_top, self.zero_draw_w, self.cell_h * 3)
         self._draw_number_grid(num_left, num_top)
@@ -3439,13 +4861,13 @@ class RouletteBoardApp:
                 y1 = cy - box_h / 2
                 x2 = cx + box_w / 2
                 y2 = cy + box_h / 2
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill=self._board_felt_color(), outline="#d4af37", width=2)
+                self.canvas.create_rectangle(x1, y1, x2, y2, fill=self._zero_color(), outline="#d4af37", width=2)
                 self.canvas.create_text(
                     cx,
                     cy,
                     text=token,
                     font=("Georgia", 26, "bold"),
-                    fill="#000000",
+                    fill=self._zero_font_color(),
                     justify="center",
                     angle=90,
                 )
@@ -3460,7 +4882,7 @@ class RouletteBoardApp:
                 )
             return
 
-        self.canvas.create_rectangle(x, y, x + w, y + h, fill=self._board_felt_color(), outline="#d4af37", width=2)
+        self.canvas.create_rectangle(x, y, x + w, y + h, fill=self._zero_color(), outline="#d4af37", width=2)
         specs = self._zero_pocket_specs()
         cell_h = h / 3.0
         font_size = 26
@@ -3477,7 +4899,7 @@ class RouletteBoardApp:
                 center_y,
                 text=token,
                 font=("Georgia", font_size, "bold"),
-                fill="#000000",
+                fill=self._zero_font_color(),
                 justify="center",
                 angle=90,
             )
@@ -3492,16 +4914,31 @@ class RouletteBoardApp:
             )
 
     def _draw_glass_swirl_background(self, table_x1, table_y1, table_x2, table_y2):
-        self.canvas.create_rectangle(0, 0, self.canvas_w, self.canvas_h, fill=self._surround_color(), outline="")
+        nav_h, top_h, surface_w, surface_h = self._board_surround_surface_metrics()
+        self._draw_textured_rect(
+            0,
+            0,
+            self.canvas_w,
+            self.canvas_h,
+            self._surround_color(),
+            self._surround_texture(),
+            outline="",
+            outline_width=0,
+            tags=("board_bg",),
+            origin_x=0,
+            origin_y=nav_h + top_h,
+            surface_w=surface_w,
+            surface_h=surface_h,
+        )
 
     def _draw_table_frame(self, x1, y1, x2, y2):
-        self.canvas.create_rectangle(x1, y1, x2, y2, fill=self._board_felt_color(), outline="", width=0)
+        self._draw_textured_rect(x1, y1, x2, y2, self._board_felt_color(), self._board_felt_texture(), outline="", outline_width=0, tags=("board_bg",))
 
-        # Porcelain edge and light glaze highlight.
-        self.canvas.create_rectangle(x1, y1, x2, y2, outline="#0b1b3b", width=8)
-        self.canvas.create_rectangle(x1 + 4, y1 + 4, x2 - 4, y2 - 4, outline="#60a5fa", width=3)
-        self.canvas.create_rectangle(x1 + 8, y1 + 8, x2 - 8, y2 - 8, outline="#dbeafe", width=2)
-        self.canvas.create_rectangle(x1 + 11, y1 + 11, x2 - 11, y2 - 11, outline="#1d4ed8", width=2)
+        # Use a warmer rail and brass highlight so the frame reads closer to a casino table.
+        self.canvas.create_rectangle(x1, y1, x2, y2, outline="#2f190d", width=10)
+        self.canvas.create_rectangle(x1 + 5, y1 + 5, x2 - 5, y2 - 5, outline="#7c4a25", width=4)
+        self.canvas.create_rectangle(x1 + 9, y1 + 9, x2 - 9, y2 - 9, outline="#c7972a", width=2)
+        self.canvas.create_rectangle(x1 + 12, y1 + 12, x2 - 12, y2 - 12, outline="#f2de9a", width=1)
 
     def _draw_compound_outside_label(self, cx, cy, main_text, detail_text, fill="#000000"):
         main_font = ("Georgia", 18, "bold")
@@ -3546,7 +4983,7 @@ class RouletteBoardApp:
                     (y1 + y2) / 2,
                     text=str(number),
                     font=("Georgia", 26, "bold"),
-                    fill="#f8fafc",
+                    fill=self._numbers_font_color(),
                 )
 
                 self._add_spot(
@@ -3564,13 +5001,13 @@ class RouletteBoardApp:
             y1, y2 = self._segmented_bounds(num_top, self.cell_h, r, 3, self.outside_box_gap)
             x1 = num_right + self.column_gap
             x2 = x1 + self.column_bet_w
-            self.canvas.create_rectangle(x1, y1, x2, y2, fill="#7c3aed", outline="#d4af37", width=2)
+            self.canvas.create_rectangle(x1, y1, x2, y2, fill=self._columns_color(), outline="#d4af37", width=2)
             self.canvas.create_text(
                 (x1 + x2) / 2,
                 (y1 + y2) / 2,
                 text=f"Col {3 - r}",
                 font=("Georgia", 17, "bold"),
-                fill="#000000",
+                fill=self._columns_font_color(),
                 justify="center",
                 angle=90,
             )
@@ -3581,36 +5018,67 @@ class RouletteBoardApp:
 
         for i, text in enumerate(["Doz 1", "Doz 2", "Doz 3"]):
             x1, x2 = self._segmented_bounds(left, 4 * self.cell_w, i, 3, self.outside_box_gap)
-            self.canvas.create_rectangle(x1, dozen_y1, x2, dozen_y2, fill="#d946ef", outline="#d4af37", width=2)
+            self.canvas.create_rectangle(x1, dozen_y1, x2, dozen_y2, fill=self._dozens_color(), outline="#d4af37", width=2)
             self.canvas.create_text(
                 (x1 + x2) / 2,
                 (dozen_y1 + dozen_y2) / 2,
                 text=text,
                 font=("Georgia", 20, "bold"),
-                fill="#000000",
+                fill=self._dozens_font_color(),
             )
 
         even_y1 = dozen_y2 + self.vertical_gap
         even_y2 = even_y1 + 72
-        labels = ["1-18", "EVEN", "RED", "BLACK", "ODD", "19-36"]
+        low_high_fill, high_fill = self._outside_pair_box_colors(
+            "outside_low_high_color",
+            companion_mode="lighter",
+            standard_pair=(
+                self.STANDARD_THEME_COLORS["outside_low_high_color"],
+                self.STANDARD_THEME_COLORS["outside_low_high_color"],
+            ),
+        )
+        low_high_text_fill = (
+            "#ffffff"
+            if self._theme_color_choice("outside_low_high_font_color") == self.STANDARD_COLOR_TOKEN
+            else self._outside_low_high_font_color()
+        )
+        even_fill, odd_fill = self._outside_pair_box_colors(
+            "outside_even_odd_color",
+            companion_mode="darker",
+            standard_pair=(
+                self.STANDARD_THEME_COLORS["outside_even_odd_color"],
+                self.STANDARD_THEME_COLORS["outside_even_odd_color"],
+            ),
+        )
+        even_odd_text_fill = (
+            "#ffffff"
+            if self._theme_color_choice("outside_even_odd_font_color") == self.STANDARD_COLOR_TOKEN
+            else self._outside_even_odd_font_color()
+        )
+        red_fill, black_fill = self._outside_pair_box_colors(
+            "outside_red_black_color",
+            companion_mode="darker",
+            standard_pair=(
+                self.STANDARD_THEME_COLORS["outside_red_black_color"],
+                self.STANDARD_THEME_COLORS["outside_red_black_color"],
+            ),
+        )
+        red_text_fill = self._outside_red_black_font_color()
+        black_text_fill = self._outside_red_black_font_color()
+        if self._theme_color_choice("outside_red_black_font_color") == self.STANDARD_COLOR_TOKEN:
+            red_text_fill = "#ff0000"
+            black_text_fill = "#000000"
+        outside_specs = [
+            ("1-18", low_high_fill, low_high_text_fill),
+            ("EVEN", even_fill, even_odd_text_fill),
+            ("RED", red_fill, red_text_fill),
+            ("BLACK", black_fill, black_text_fill),
+            ("ODD", odd_fill, even_odd_text_fill),
+            ("19-36", high_fill, low_high_text_fill),
+        ]
 
-        for i, text in enumerate(labels):
+        for i, (text, fill, text_fill) in enumerate(outside_specs):
             x1, x2 = self._segmented_bounds(left, 2 * self.cell_w, i, 6, self.outside_box_gap)
-            fill = "#b91c1c" if text == "RED" else "#0f7a36"
-            text_fill = "#000000"
-            if text == "BLACK":
-                fill = "#101010"
-                text_fill = "#f8fafc"
-            elif text == "EVEN":
-                fill = "#22ff22"
-            elif text == "1-18":
-                fill = "#f97316"
-            elif text == "19-36":
-                fill = "#5b21b6"
-            elif text == "ODD":
-                fill = "#00FFFF"
-            elif text == "RED":
-                text_fill = "#f8fafc"
             self.canvas.create_rectangle(x1, even_y1, x2, even_y2, fill=fill, outline="#d4af37", width=2)
             cx = (x1 + x2) / 2
             cy = (even_y1 + even_y2) / 2
@@ -4071,6 +5539,7 @@ class RouletteBoardApp:
             "label": label,
             "center": center,
             "payout": payout,
+            "payout_mult": int(payout.split(":")[0]),
             "hit": hit_id,
         }
         if has_marker:
@@ -4105,14 +5574,14 @@ class RouletteBoardApp:
 
         popup = tk.Toplevel(self.root)
         popup.title("French Call Bets")
-        popup.configure(bg="#FFFFFF")
+        popup.configure(bg=self._surround_color())
         popup.transient(self.root)
         self.call_bet_popup = popup
 
-        frame = tk.Frame(popup, bg="#FFFFFF", padx=12, pady=10)
+        frame = tk.Frame(popup, bg=self._surround_color(), padx=12, pady=10)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Call Bet", bg="#FFFFFF", fg="#111827", font=("Segoe UI", 10, "bold")).grid(
+        tk.Label(frame, text="Call Bet", bg=self._surround_color(), fg=self._contrast_text_color(self._surround_color()), font=("Segoe UI", 10, "bold")).grid(
             row=0, column=0, sticky="w"
         )
         self.call_bet_name_combo = ttk.Combobox(
@@ -4129,8 +5598,8 @@ class RouletteBoardApp:
         digit_label = tk.Label(
             frame,
             text="Final Digit",
-            bg="#FFFFFF",
-            fg="#111827",
+            bg=self._surround_color(),
+            fg=self._contrast_text_color(self._surround_color()),
             font=("Segoe UI", 10, "bold"),
         )
         digit_label.grid(row=1, column=0, sticky="w", pady=(8, 0))
@@ -4144,7 +5613,7 @@ class RouletteBoardApp:
         digit_combo.grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(8, 0))
         self.call_bet_final_digit_controls.append((digit_label, digit_combo))
 
-        tk.Label(frame, text="Unit Amount", bg="#FFFFFF", fg="#111827", font=("Segoe UI", 10, "bold")).grid(
+        tk.Label(frame, text="Unit Amount", bg=self._surround_color(), fg=self._contrast_text_color(self._surround_color()), font=("Segoe UI", 10, "bold")).grid(
             row=2, column=0, sticky="w", pady=(8, 0)
         )
         tk.Entry(frame, textvariable=self.call_bet_amount_var, width=12).grid(
@@ -4154,14 +5623,14 @@ class RouletteBoardApp:
         tk.Label(
             frame,
             text="Amount is per unit of the selected French call bet.",
-            bg="#FFFFFF",
-            fg="#475569",
+            bg=self._surround_color(),
+            fg=self._surround_muted_text_color(),
             font=("Segoe UI", 9),
             anchor="w",
             justify="left",
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
-        buttons = tk.Frame(frame, bg="#FFFFFF")
+        buttons = tk.Frame(frame, bg=self._surround_color())
         buttons.grid(row=4, column=0, columnspan=2, sticky="e", pady=(12, 0))
         tk.Button(
             buttons,
@@ -4191,6 +5660,7 @@ class RouletteBoardApp:
         popup.bind("<Escape>", lambda _event: self._close_call_bet_popup())
         popup.protocol("WM_DELETE_WINDOW", self._close_call_bet_popup)
         popup.resizable(False, False)
+        self._apply_call_bet_popup_theme()
         self._sync_call_bet_popup_fields()
         self._position_call_bet_popup(popup)
         if focus_popup:
@@ -5022,10 +6492,11 @@ class RouletteBoardApp:
     def _refresh_legend_highlight(self):
         current = self.selected_chip.get()
         for denom, canvas in self.legend_canvases.items():
+            canvas.configure(bg=self._surround_color())
             if denom == current:
                 canvas.configure(highlightthickness=3, highlightbackground="#fde047")
             else:
-                canvas.configure(highlightthickness=1, highlightbackground="#374151")
+                canvas.configure(highlightthickness=0)
 
     def _draw_chip(self, canvas, cx, cy, radius, denom, top_label=False, extra_tags=()):
         fill, edge, text_color, accent = self.CHIP_COLORS[denom]
@@ -5084,6 +6555,4 @@ if __name__ == "__main__":
     root.state("zoomed")
     app = RouletteBoardApp(root)
     root.mainloop()
-
-
 
